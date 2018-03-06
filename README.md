@@ -21,17 +21,18 @@ Note: An unencrypted end-point should not be used in production.  In a real-worl
 
 ### /create_pair
 
-Method: POST
-Header: Basic Username:password
+
+Method: POST  
+Header: Basic Username:password  
 Data: None
 
 This end-point authenticates the user using the provided username and password and, if successful, generates a SSH key pair.  The private key is returned in the response and not stored.  The pubic key is saved in a database and is associated with the user.  Authentication is determined by the PAM configuration associated with the service (sshauth).
 
 ### /get_keys/<username>
 
-Method: GET
-Parameter: username
-Header: None
+Method: GET  
+Parameter: username  
+Header: None  
 
 This end-point returns the list of public keys for the user.  This would typically be called by sshd through a configuration option (see below).
 
