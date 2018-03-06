@@ -28,7 +28,7 @@ Data: None
 
 This end-point authenticates the user using the provided username and password and, if successful, generates a SSH key pair.  The private key is returned in the response and not stored.  The pubic key is saved in a database and is associated with the user.  Authentication is determined by the PAM configuration associated with the service (sshauth).
 
-### /get_keys/<username>
+### /get_keys/\<username\>
 
 Method: GET  
 Parameter: username  
@@ -39,7 +39,7 @@ This end-point returns the list of public keys for the user.  This would typical
 
 ### /reset
 
-Method: DELETE
+Method: DELETE  
 
 Not yet implemented.
 
