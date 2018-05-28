@@ -1,1 +1,5 @@
 *.pyc
+.coverage
+cover
+cacert
+cacert.pub

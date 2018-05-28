@@ -1,0 +1,15 @@
+---
+global:
+  mongo_host: localhost
+  mongo_db: sshauth
+  registry: registry
+scopes:
+  scope1:
+     skey: scope1-secret
+     cacert: ./cacert
+     lifetime: 1w
+  scope2:
+     lifetime: 1d
+     allowed_create_addrs:
+       - '127.0.0.1'
+...

@@ -3,6 +3,7 @@ import sys
 import os
 import subprocess
 from time import time
+import yaml
 
 
 class SSHAuth(object):
@@ -12,12 +13,21 @@ class SSHAuth(object):
     and has public functions to lookup, pull and expire images.
     """
 
+    # Default Lifetime 1 day
     LIFETIME = 3600*24
 
-    def __init__(self):
+    def __init__(self, configfile):
         """
         Create an instance of the ssh Auth manager.
         """
+        self.config = yaml.load(open(configfile))
+        self.scopes = self.config['scopes']
+        for scopen in self.scopes:
+            scope = self.scopes[scopen]
+            if 'lifetime' in scope:
+                scope['lifetime_secs'] = self._convert_time(scope['lifetime'])
+                print scope['lifetime_secs']
+
         mongo_host = 'localhost'
         if 'mongo_host' in os.environ:
             mongo_host = os.environ['mongo_host']
@@ -25,7 +35,7 @@ class SSHAuth(object):
         self.db = mongo['sshauth']
         self.registry = self.db['registry']
 
-    def run_command(self, command):
+    def _run_command(self, command):
         try:
             errno = subprocess.call(command)
         except Exception as err:
@@ -33,22 +43,82 @@ class SSHAuth(object):
             return -1
         return errno
 
-    def generate_pair(self):
+    def _check_scope(self, rscope, user, raddr, skey):
+        if rscope is None:
+            return True
+        if rscope not in self.scopes:
+            raise ValueError("Unrecongnized Scope.")
+        scope = self.scopes[rscope]
+        if 'skey' in scope and skey != scope['skey']:
+            raise OSError("skey doesn't match")
+        if 'allowed_create_addrs' in scope and \
+           raddr not in scope['allowed_create_addrs']:
+            raise OSError("host not in allowed host for scope")
+        return True
+
+    def _convert_time(self, ltime):
+        # If a number, then it is in minutes
+        if type(ltime) is int:
+            return 60*ltime
+        elif ltime[-1] >= '0' and ltime[-1] <= '9':
+            return 60*int(ltime)
+        elif ltime.endswith('d'):
+            return 24*3600*int(ltime[0:-1])
+        elif ltime.endswith('w'):
+            return 7*24*3600*int(ltime[0:-1])
+        elif ltime.endswith('y'):
+            return 365*24*3600*int(ltime[0:-1])
+        else:
+            raise ValueError("Unrecongnized lifetime")
+
+    def _sign(self, fn, user, scopename):
+        if scopename is None:
+            return None
+        scope = self.scopes.get(scopename)
+        if scope is None:
+            return None
+        if 'cacert' not in scope:
+            return None
+        comm = ['ssh-keygen', '-s', scope['cacert'],
+                '-I', 'user_%s' % (user),
+                '-n', user]
+        if 'lifetime_secs' in scope:
+            comm.append('-V')
+            comm.append('+' + str(scope['lifetime_secs']))
+        comm.append(fn+'.pub')
+        if self._run_command(comm) != 0:
+            raise OSError('Signing failed')
+        with open(fn+'-cert.pub', 'r') as f:
+            cert = f.read().rstrip()
+        os.remove(fn + '-cert.pub')
+        return cert
+
+    def _generate_pair(self, user, scope=None):
         fname = 'tempfile'
+        if os.path.exists(fname):
+            os.remove(fname)
+        if os.path.exists(fname+'.pub'):
+            os.remove(fname+'.pub')
         comm = ['ssh-keygen', '-q', '-f', fname, '-N', '', '-t', 'rsa']
-        if self.run_command(comm) != 0:
-            print "Error"
-            return False
+        cert = None
+        if self._run_command(comm) != 0:
+            raise OSError('Key generation failed')
         with open(fname+'.pub', 'r') as f:
             pub = f.read().rstrip()
         with open(fname, 'r') as f:
             priv = f.read()
+        cert = self._sign(fname, user, scope)
+
         os.remove(fname)
         os.remove(fname+'.pub')
-        return pub, priv
+        return pub, priv, cert
 
-    def create_pair(self, user, scope, lifetime=LIFETIME):
-        pub, priv = self.generate_pair()
+    def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
+        if scope is not None:
+            self._check_scope(scope, user, raddr, skey)
+            if 'lifetime_secs' in self.scopes[scope]:
+                lifetime = self.scopes[scope]['lifetime_secs']
+        pub, priv, cert = self._generate_pair(user, scope=scope)
         if scope is None:
             scope = 'default'
         rec = {'user': user,
@@ -59,23 +129,27 @@ class SSHAuth(object):
                'expires': time() + lifetime
                }
         self.registry.insert(rec)
-        return priv
+        return priv, cert
 
     def get_keys(self, user, scope=None):
         resp = []
+        now = time()
         q = {'user': user, 'enabled': True}
         if scope is not None:
             q['scope'] = scope
         for rec in self.registry.find(q):
-            resp.append(rec['pubkey'])
+            if now > rec['expires']:
+                self.expire(rec['_id'])
+            else:
+                resp.append(rec['pubkey'])
         return resp
 
     def expireall(self, user):
         self.registry.remove({'user': user})
 
 
-def main():
-    s = SSHAuth()
+def main(): # pragma: no cover
+    s = SSHAuth('config.yaml')
     if len(sys.argv) > 2 and sys.argv[1] == 'create':
         user = sys.argv[2]
         scope = None

@@ -1,0 +1,14 @@
+FROM centos:7
+
+RUN yum -y install openssh-server curl
+
+RUN useradd -m auser
+
+ADD ./ssh /etc/ssh/
+RUN \
+    mkdir /var/run/sshd 
+
+EXPOSE 22
+
+
+CMD [ "/usr/sbin/sshd", "-D", "-d" ]

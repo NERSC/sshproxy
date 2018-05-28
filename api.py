@@ -25,11 +25,24 @@ from flask import Flask, request
 import logging
 from ssh_auth import SSHAuth
 import pam
+import os
+import json
 
 
 app = Flask(__name__)
+CONFIG = os.environ.get('CONFIG', 'config.yaml')
+ssh_auth = SSHAuth(CONFIG)
 
-ssh_auth = SSHAuth()
+
+class ctx(object):
+    def __init__(self, type, username):
+        self.type = type
+        self.username = username
+
+
+class AuthError(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
 
 
 @app.before_first_request
@@ -43,11 +56,57 @@ def setup_logging():
         app.logger.setLevel(logging.INFO)
 
 
-def auth(username, password):
+def get_skey(request):
+    try:
+        rqd = request.get_data()
+        data = json.loads(rqd)
+        if 'skey' in data:
+            return data['skey']
+    except:
+        return None
+    return None
+
+
+def doauth(headers):
+    if 'Authorization' not in headers:
+        raise AuthError("No authentication provided")
+    authh = headers['Authorization']
+    if authh.startswith('Basic '):
+        (username, password) = authh.replace('Basic ', '').split(':')
+        if os.environ.get('FAKEAUTH') == "1":
+            print "Fake Auth: %s" % (username)
+            if password == 'bad':
+                raise AuthError('Bad fake password')
+            return ctx('fake', username)
+        if not pam.authenticate(username, password, service='sshauth'):
+            raise AuthError("Failed login")
+        return ctx('basic', username)
+    else:
+        raise ValueError("Unrecongnized authentication")
+
+
+@app.route('/create_pair/<scope>/', methods=['POST'])
+def create_pair_scope(scope):
     """
-    Perform authentication
+    Create an RSA key pair and return the private key
     """
-    return pam.authenticate(username, password, service='sshauth')
+    try:
+        ctx = doauth(request.headers)
+        user = ctx.username
+        skey = get_skey(request)
+        raddr = request.remote_addr
+        resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey)
+        app.logger.info('created %s' % (user))
+        print cert
+        return resp + cert
+    except AuthError:
+        return "Authentication Failure", 403
+    except OSError as err:
+        return str(err), 403
+    except ValueError as err:
+        return str(err), 403
+    except:
+        return "Failure", 401
 
 
 @app.route('/create_pair', methods=['POST'])
@@ -56,20 +115,14 @@ def create_pair():
     Create an RSA key pair and return the private key
     """
     try:
-        headers = request.headers
-        if 'Authorization' not in headers:
-            return "No authentiation provided", 404
-        authh = headers['Authorization']
-        if authh.startswith('Basic '):
-            (username, password) = authh.replace('Basic ', '').split(':')
-            if not auth(username, password):
-                return "Permission denied", 404
-        else:
-            return "No authentiation provided", 404
-        resp = ssh_auth.create_pair(username, None)
+        ctx = doauth(request.headers)
+        raddr = request.remote_addr
+        resp = ssh_auth.create_pair(ctx.username, raddr, None)
+        app.logger.info('created %s' % (ctx.username))
         return resp
+    except AuthError:
+        return "Authentication Failure", 403
     except:
-        raise
         return "Failure", 401
 
 
@@ -94,17 +147,10 @@ def reset():
     Get the keys for a user
     """
     try:
-        headers = request.headers
-        if 'Authorization' not in headers:
-            return "No authentiation provided", 404
-        authh = headers['Authorization']
-        if authh.startswith('Basic '):
-            (username, password) = authh.replace('Basic ', '').split(':')
-            if not auth(username, password):
-                return "Permission denied", 404
-        else:
-            return "No authentiation provided", 404
-        ssh_auth.expireall(username)
+        ctx = doauth(request.headers)
+        ssh_auth.expireall(ctx.username)
         return "Success"
+    except AuthError:
+        return "Authentication Failure", 403
     except:
         return "Failure", 401

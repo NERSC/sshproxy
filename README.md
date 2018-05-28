@@ -1,6 +1,6 @@
 # SSH AUTH API
 
-This simple service provides a mechanism to generate SSH RSA key pairs, store the public key, and return an authorized_keys file that can be used by sshd.  This could be used to effecitvely replace a private myproxy/gsi-ssh configuration.
+This simple service provides a mechanism to generate SSH RSA key pairs, store the public key, and return an authorized_keys file that can be used by sshd.  This could be used to effectively replace a private myproxy/gsi-ssh configuration.
 
 ## Quick Example
 
@@ -28,6 +28,20 @@ Data: None
 
 This end-point authenticates the user using the provided username and password and, if successful, generates a SSH key pair.  The private key is returned in the response and not stored.  The pubic key is saved in a database and is associated with the user.  Authentication is determined by the PAM configuration associated with the service (sshauth).
 
+### /create_pair/<scope>
+
+Method: POST  
+Header: Basic Username:password  
+Data: JSON encoded dictionary that may contain an 'skey' for the scope.
+
+Create a key pair for the specified scope.  The scope may require a share key
+(skey) which must be provided in the data block which is a JSON encoded dictionary.
+The scope may use an ssh CA certificate.  If the scope does use a CA certificate,
+the return will be the private key followed by the signature string.  These
+returns need to be split into private key (e.g. id_rsa) and the certificate
+file (e.g. id_rsa-cert.pub) in order for ssh to be make use of them.
+
+
 ### /get_keys/\<username\>
 
 Method: GET  
@@ -45,6 +59,40 @@ Not yet implemented.
 
 ## Configuration
 
+### Scopes
+
+Scopes allowing defining and limiting how a key can be created and used.  scopes
+are defined in the config.yaml.  Each scope has a name space and can list
+multiple optional enforcements.  Some constraints apply to the creator (e.g. the host that issues the create_pair).  Others constraints apply to the remote host (e.g. the host that the SSH connection will originate from).
+
+Here is an example config file.
+
+```yaml
+scopes:
+  scope1:
+     skey: scope1-secret
+     cacert: ./cacert
+     lifetime: 1d
+  scope2:
+     allowed_create_addrs:
+       - '127.0.0.1'
+```
+
+**skey**: A shared key that must presented by the creator.  The shared key must be provided in the data block of the POST create_pair operation.
+
+**allowed_create_addrs**: The list of IP addresses that create_pair requests can originate from.
+
+**allowed_remote_addrs**: The list of IP addresses that the ssh connection can
+originate from.  This requires a CA certificate for the scope.
+
+**allowed_users**: The list of users who are allowed to use the scope.
+
+**lifetime**: The lifetime of the key.  If it is an integer it is treated as
+minutes. If it ends in "d", "w", "y", then it is treated as day, weeks or years
+respectively.
+
+**cacert**: Specify a ssh CA certificate to user for signing the public key.
+
 ### PAM Configuration
 
 Authentications is configured via PAM.  Currently just the authenticate interface is used.  Here is an example configuration that uses the common auth stack on the system.
@@ -54,6 +102,13 @@ Authentications is configured via PAM.  Currently just the authenticate interfac
 
 
 ### SSHD Configuration
+
+There are two methods for configuring the ssh daemon: AuthorizedKeysCommand or
+TrustedUserKeys.  The first issues a get_keys request for each ssh connection
+to get the list of active keys for a user.  The second uses the CA certificate
+mechanism provided by ssh.
+
+#### AuthorizedKeysCommand configuration
 
 To integrate with SSHD, first create a wrapper that uses curl to call get_keys.
 
@@ -66,13 +121,3 @@ Then used the `AuthorizedKeysCommand` configuration option for sshd to have sshd
     AuthorizedKeysCommand /usr/lib/nersc-ssh-keys/NERSC-keys-api
     AuthorizedKeysCommandUser nobody
     AuthorizedKeysFile /dev/null
-
-
-
-## Future Improvements
-
-### Scopes and Expiration
-
-One design goal is to have the service limit the scope of keys and expire request.  The service already has stubs for storing a scope and expiration time for the key.  This could be used to restrict how long keys could be used before the user would need to re-authenticate to generate a new key pair.  The scope can be used to restrict keys to a specific node or purpose.  
-
-In addition, the generation of keys tied to a scope would likely be restricted either to some set of calling nodes or via some service token.
