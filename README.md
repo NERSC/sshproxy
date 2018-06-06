@@ -21,7 +21,6 @@ Note: An unencrypted end-point should not be used in production.  In a real-worl
 
 ### /create_pair
 
-
 Method: POST  
 Header: Basic Username:password  
 Data: None
