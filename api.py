@@ -27,12 +27,16 @@ from ssh_auth import SSHAuth
 import pam
 import os
 import json
-
+from time import time
 
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
 
+# TODO: Move auth stuff into a separate module
+failed_count = {}
+MAX_FAILED = 5
+MAX_FAILED_WINDOW = 60 * 5
 
 class ctx(object):
     def __init__(self, type, username):
@@ -66,20 +70,51 @@ def get_skey(request):
         return None
     return None
 
+def _check_failed_count(username):
+    """
+    Return True if the user has too many failed attempts.
+    """
+    if username not in failed_count:
+        return False
+    fr = failed_count[username]
+    if fr['count'] >= MAX_FAILED and \
+       (time() - fr['last']) < MAX_FAILED_WINDOW:
+        return True
+    return False
+
+
+def _failed_login(username):
+    if username not in failed_count:
+        failed_count[username] = {'count': 0}
+    failed_count[username]['count'] += 1
+    failed_count['last'] = time()
+
 
 def doauth(headers):
+    """
+    Authenticaiton function.  This currently just supports basic auth using
+    pam.
+    """
     if 'Authorization' not in headers:
         raise AuthError("No authentication provided")
     authh = headers['Authorization']
     if authh.startswith('Basic '):
         (username, password) = authh.replace('Basic ', '').split(':')
+        if _check_failed_count(username):
+            raise AuthError('Too many failed logins')
         if os.environ.get('FAKEAUTH') == "1":
             print "Fake Auth: %s" % (username)
             if password == 'bad':
+                _failed_login(username)
                 raise AuthError('Bad fake password')
+            if username in failed_count:
+                del failed_count[username]
             return ctx('fake', username)
         if not pam.authenticate(username, password, service='sshauth'):
+            _failed_login(username)
             raise AuthError("Failed login")
+        if username in failed_count:
+            del failed_count[username]
         return ctx('basic', username)
     else:
         raise ValueError("Unrecongnized authentication")
@@ -116,12 +151,35 @@ def create_pair():
     """
     try:
         ctx = doauth(request.headers)
-        raddr = request.remote_addr
+        raddr = request.access_route[-1]
         resp = ssh_auth.create_pair(ctx.username, raddr, None)
         app.logger.info('created %s' % (ctx.username))
         return resp
     except AuthError:
         return "Authentication Failure", 403
+    except:
+        return "Failure", 401
+
+@app.route('/sign_host/<scope>/', methods=['POST'])
+def sign_host(scope):
+    """
+    Create an RSA key pair and return the private key
+    """
+    try:
+        raddr = request.access_route[-1]
+        cert = ssh_auth.sign_host(raddr, scope)
+        app.logger.info('signed %s' % (raddr))
+        return cert
+    except:
+        return "Failure", 401
+
+@app.route('/get_ca_pubkey/<scope>/', methods=['GET'])
+def get_ca_pubkey(scope):
+    """
+    Used to retrieve the CA key for a scopeself.
+    """
+    try:
+        return ssh_auth.get_ca_pubkey(scope)
     except:
         return "Failure", 401
 
@@ -148,7 +206,7 @@ def reset():
     """
     try:
         ctx = doauth(request.headers)
-        ssh_auth.expireall(ctx.username)
+        ssh_auth.expireuser(ctx.username)
         return "Success"
     except AuthError:
         return "Authentication Failure", 403

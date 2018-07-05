@@ -1,14 +1,20 @@
 from pymongo import MongoClient
 import sys
 import os
-import subprocess
+import socket
+from subprocess import call, Popen, PIPE
 from time import time
 import yaml
 
 
+class ScopeError(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
+
 class SSHAuth(object):
     """
-    This class handles most of the backend work for the image gateway.
+    This class handles most of the backend work for the api.
     It uses a Mongo Database to track state, uses threads to dispatch work,
     and has public functions to lookup, pull and expire images.
     """
@@ -21,12 +27,13 @@ class SSHAuth(object):
         Create an instance of the ssh Auth manager.
         """
         self.config = yaml.load(open(configfile))
+        gconfig = self.config.get('global', {})
+        self.unallowed_users = gconfig.get('unallowed_users', ['root'])
         self.scopes = self.config['scopes']
         for scopen in self.scopes:
             scope = self.scopes[scopen]
             if 'lifetime' in scope:
                 scope['lifetime_secs'] = self._convert_time(scope['lifetime'])
-                print scope['lifetime_secs']
 
         mongo_host = 'localhost'
         if 'mongo_host' in os.environ:
@@ -37,7 +44,7 @@ class SSHAuth(object):
 
     def _run_command(self, command):
         try:
-            errno = subprocess.call(command)
+            errno = call(command)
         except Exception as err:
             print err
             return -1
@@ -47,13 +54,19 @@ class SSHAuth(object):
         if rscope is None:
             return True
         if rscope not in self.scopes:
-            raise ValueError("Unrecongnized Scope.")
+            raise ScopeError("Invalid or missing Scope.")
         scope = self.scopes[rscope]
         if 'skey' in scope and skey != scope['skey']:
             raise OSError("skey doesn't match")
         if 'allowed_create_addrs' in scope and \
            raddr not in scope['allowed_create_addrs']:
             raise OSError("host not in allowed host for scope")
+        return True
+
+    def _check_allowed(self, user, scope):
+        if user in self.unallowed_users:
+            raise OSError("user %s not allowed" % (user))
+        # TODO: Add scope version too
         return True
 
     def _convert_time(self, ltime):
@@ -71,7 +84,7 @@ class SSHAuth(object):
         else:
             raise ValueError("Unrecongnized lifetime")
 
-    def _sign(self, fn, user, scopename):
+    def _sign(self, fn, principle, serial, scopename):
         if scopename is None:
             return None
         scope = self.scopes.get(scopename)
@@ -79,9 +92,14 @@ class SSHAuth(object):
             return None
         if 'cacert' not in scope:
             return None
-        comm = ['ssh-keygen', '-s', scope['cacert'],
-                '-I', 'user_%s' % (user),
-                '-n', user]
+        comm = ['ssh-keygen', '-s', scope['cacert'], '-z', serial]
+        if scope.get('type') == 'host':
+            comm.append('-h')
+            pname = 'host_%s' % (principle)
+        else:
+            pname = 'user_%s' % (principle)
+        comm.extend(['-I', pname, '-n', principle])
+
         if 'lifetime_secs' in scope:
             comm.append('-V')
             comm.append('+' + str(scope['lifetime_secs']))
@@ -93,7 +111,7 @@ class SSHAuth(object):
         os.remove(fn + '-cert.pub')
         return cert
 
-    def _generate_pair(self, user, scope=None):
+    def _generate_pair(self, user, serial=None, scope=None):
         fname = 'tempfile'
         if os.path.exists(fname):
             os.remove(fname)
@@ -107,24 +125,81 @@ class SSHAuth(object):
             pub = f.read().rstrip()
         with open(fname, 'r') as f:
             priv = f.read()
-        cert = self._sign(fname, user, scope)
+        cert = self._sign(fname, user, serial, scope)
 
         os.remove(fname)
         os.remove(fname+'.pub')
         return pub, priv, cert
+
+    def _get_host_key(self, raddr, type='rsa'):
+        command = ['ssh-keyscan', '-t', type, '-T', '5', raddr]
+        p = Popen(command, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = p.communicate()
+        errno = p.wait()
+        if errno != 0 or len(stdout) < 2:
+            raise OSError("ssh-keyscan failed")
+        out = ' '.join(stdout.rstrip().split(' ')[1:])
+        return out
+
+    def _get_serial(self):
+        return str(time()).replace('.', '')
+
+    def get_ca_pubkey(self, scopen):
+        if scopen is None:
+            raise ScopeError("Scope is required.")
+        if scopen not in self.scopes:
+            raise ScopeError("Unrecongnized scope")
+        scope = self.scopes[scopen]
+        with open(scope['cacert']+'.pub') as f:
+            cacert = f.read()
+        return cacert
+
+    def sign_host(self, raddr, scopen):
+        if scopen is None:
+            raise ScopeError("Scope is required for host signing")
+        if scopen not in self.scopes:
+            raise ScopeError("Unrecongnized scope")
+        scope = self.scopes[scopen]
+        if 'type' not in scope or scope['type'] != 'host':
+            raise ScopeError("Scope must be a host type for this operaiton")
+        lifetime = scope['lifetime_secs']
+        pub = self._get_host_key(raddr)
+        hostname = socket.gethostbyaddr(raddr)[0]
+        fn = 'host'
+        with open(fn+'.pub', 'w') as f:
+            f.write(pub)
+        serial = self._get_serial()
+        cert = self._sign(fn, hostname, serial, scopen)
+        os.remove(fn+'.pub')
+        rec = {'ip': raddr,
+               'principle': hostname,
+               'type': 'host',
+               'pubkey': pub,
+               'enabled': True,
+               'serial': serial,
+               'scope': scopen,
+               'created': time(),
+               'expires': time() + lifetime
+               }
+        self.registry.insert(rec)
+        return cert
 
     def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
         if scope is not None:
             self._check_scope(scope, user, raddr, skey)
             if 'lifetime_secs' in self.scopes[scope]:
                 lifetime = self.scopes[scope]['lifetime_secs']
-        pub, priv, cert = self._generate_pair(user, scope=scope)
+        self._check_allowed(user, scope)
+        serial = self._get_serial()
+        pub, priv, cert = self._generate_pair(user, serial=serial, scope=scope)
         if scope is None:
             scope = 'default'
-        rec = {'user': user,
+        rec = {'principle': user,
                'pubkey': pub,
+               'type': 'user',
                'enabled': True,
                'scope': scope,
+               'serial': serial,
                'created': time(),
                'expires': time() + lifetime
                }
@@ -134,7 +209,7 @@ class SSHAuth(object):
     def get_keys(self, user, scope=None):
         resp = []
         now = time()
-        q = {'user': user, 'enabled': True}
+        q = {'principle': user, 'enabled': True}
         if scope is not None:
             q['scope'] = scope
         for rec in self.registry.find(q):
@@ -144,9 +219,10 @@ class SSHAuth(object):
                 resp.append(rec['pubkey'])
         return resp
 
-    def expireall(self, user):
-        self.registry.remove({'user': user})
-
+    def expireuser(self, user):
+        up = {'$set': {'enabled': False}}
+        self.registry.update({'principle': user}, up)
+        #self.registry.remove({'principle': user})
 
 def main(): # pragma: no cover
     s = SSHAuth('config.yaml')

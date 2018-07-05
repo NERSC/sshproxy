@@ -21,6 +21,7 @@ import unittest
 import ssh_auth
 from pymongo import MongoClient
 from time import time
+from ssh_auth import ScopeError
 
 
 class SSHAuthTestCase(unittest.TestCase):
@@ -40,7 +41,7 @@ class SSHAuthTestCase(unittest.TestCase):
         return r
 
     def get_pub(self, user, scope):
-        r = self.registry.find_one({'user': user, 'scope': scope})
+        r = self.registry.find_one({'principle': user, 'scope': scope})
         return r['pubkey']
 
     def test_create(self):
@@ -95,6 +96,14 @@ class SSHAuthTestCase(unittest.TestCase):
         p = self.ssh._check_scope(None, 'auser', '127.0.0.1', None)
         self.assertTrue(p)
 
+    def test_allowed(self):
+        p = self.ssh._check_allowed('auser', None)
+        self.assertTrue(p)
+        with self.assertRaises(OSError):
+            p = self.ssh._check_allowed('root', None)
+        with self.assertRaises(OSError):
+            p = self.ssh.create_pair('root', '127.0.0.1', None)
+
     def test_expiration_storage(self):
         slop = 1
         DAY = 24*3600
@@ -117,10 +126,20 @@ class SSHAuthTestCase(unittest.TestCase):
         scope2 = 'scope2'
         with self.assertRaises(OSError):
             self.ssh.create_pair(self.user, '127.0.0.1', scope1, skey='wrong')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ScopeError):
             self.ssh.create_pair(self.user, '127.0.0.1', 'bogus', skey='wrong')
         with self.assertRaises(OSError):
             self.ssh.create_pair(self.user, '127.0.0.2', scope2)
+        with self.assertRaises(ScopeError):
+            self.ssh.get_ca_pubkey(None)
+        with self.assertRaises(ScopeError):
+            self.ssh.get_ca_pubkey('bogus')
+        with self.assertRaises(ScopeError):
+            self.ssh.sign_host('127.0.0,1', None)
+        with self.assertRaises(ScopeError):
+            self.ssh.sign_host('127.0.0,1', 'bogus')
+        with self.assertRaises(ScopeError):
+            self.ssh.sign_host('127.0.0,1', scope1)
 
     def test_expire_conversion(self):
         """
@@ -152,6 +171,32 @@ class SSHAuthTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.ssh._convert_time('1x')
 
+    def test_get_host_key(self):
+        """
+        Test _get_host_key
+        """
+        # Get the key for cori01-224
+        pub = self.ssh._get_host_key('128.55.224.31')
+        self.assertEquals(pub[0:7], 'ssh-rsa')
+
+        with self.assertRaises(OSError):
+            pub = self.ssh._get_host_key('127.0.0.2')
+            print(pub)
+
+    def test_sign_host(self):
+        """
+        Test _get_host_key
+        """
+        # Get the key for cori01-224
+        self.registry.remove({})
+        cert = self.ssh.sign_host('128.55.224.31', 'scope3')
+        self.assertIsNotNone(cert)
+        rec = self.registry.find_one()
+        self.assertIsNotNone(rec)
+        self.assertIn('serial', rec)
+        self.assertIn('principle', rec)
+        self.assertIn('type', rec)
+        self.assertEquals(rec['type'], 'host')
 
 if __name__ == '__main__':
     unittest.main()
