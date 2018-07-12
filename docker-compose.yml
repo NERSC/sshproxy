@@ -1,0 +1,23 @@
+version: '2'
+services:
+  mongo:
+    image: mongo:4.0
+    stdin_open: true
+    tty: true
+    labels:
+      io.rancher.container.pull_image: always
+  api:
+    build: ./
+    image: sshauth
+    environment:
+      mongo_host: mongo
+      CONFIG: /config/config.yaml
+    stdin_open: true
+    tty: true
+    privileged: true
+    links:
+    - mongo:mongo
+    labels:
+      io.rancher.container.pull_image: always
+    volumes:
+    - ./test/config.yaml:/config/config.yaml

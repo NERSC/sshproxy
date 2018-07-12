@@ -2,3 +2,4 @@ pam
 pymongo
 gunicorn
 flask
+pyyaml
