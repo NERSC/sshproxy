@@ -154,3 +154,9 @@ def reset():
         return "Authentication Failure", 403
     except:
         return "Failure", 401
+
+
+# for the load balancer checks
+@app.route('/status.html', methods=['GET'])
+def status():
+    return "OK"
