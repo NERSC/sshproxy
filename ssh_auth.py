@@ -4,6 +4,7 @@ import os
 import subprocess
 from time import time
 import yaml
+import tempfile
 
 
 class SSHAuth(object):
@@ -93,24 +94,26 @@ class SSHAuth(object):
         os.remove(fn + '-cert.pub')
         return cert
 
+    def tmp_filename(self):
+        f = tempfile.NamedTemporaryFile(delete=False)
+        f.close()
+        return f.name
+    	
     def _generate_pair(self, user, scope=None):
-        fname = 'tempfile'
-        if os.path.exists(fname):
-            os.remove(fname)
-        if os.path.exists(fname+'.pub'):
-            os.remove(fname+'.pub')
-        comm = ['ssh-keygen', '-q', '-f', fname, '-N', '', '-t', 'rsa']
+        privfile = tmp_filename()
+        pubfile = tmp_filename()
+        comm = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa']
         cert = None
         if self._run_command(comm) != 0:
             raise OSError('Key generation failed')
-        with open(fname+'.pub', 'r') as f:
+        with open(pubfile, 'r') as f:
             pub = f.read().rstrip()
-        with open(fname, 'r') as f:
+        with open(privfile, 'r') as f:
             priv = f.read()
         cert = self._sign(fname, user, scope)
 
-        os.remove(fname)
-        os.remove(fname+'.pub')
+        os.remove(privfile)
+        os.remove(pubfile)
         return pub, priv, cert
 
     def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
