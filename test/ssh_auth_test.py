@@ -198,5 +198,36 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIn('type', rec)
         self.assertEquals(rec['type'], 'host')
 
+    def test_failed_count(self):
+        """
+        Test Failed Count Logic
+        """
+        u = 'auser'
+        # Confirm it fails if user is over max and in window
+        self.ssh.failed_count[u] = {'count': 5, 'last': time()}
+        self.assertTrue(self.ssh.check_failed_count(u))
+
+        # Confirm reset clears things
+        self.ssh.reset_failed_count(u)
+        self.assertNotIn(u, self.ssh.failed_count)
+        self.assertFalse(self.ssh.check_failed_count(u))
+
+        # Confirm it works if a good login happens after the window
+        self.ssh.failed_count[u] = {'count': 5, 'last': time()-600}
+        self.assertFalse(self.ssh.check_failed_count(u))
+
+        # Confirm it works if a good login happens under the max
+        self.ssh.failed_count[u] = {'count': 4, 'last': time()}
+        self.assertFalse(self.ssh.check_failed_count(u))
+
+        # Confirm failed count increments
+        self.ssh.failed_count[u] = {'count': 4, 'last': time()}
+        before = time()
+        self.ssh.failed_login(u)
+        self.assertEquals(self.ssh.failed_count[u]['count'], 5)
+        self.assertGreaterEqual(self.ssh.failed_count[u]['last'], before)
+        self.ssh.failed_count = {}
+
+
 if __name__ == '__main__':
     unittest.main()

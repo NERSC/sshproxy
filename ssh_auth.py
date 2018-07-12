@@ -41,6 +41,35 @@ class SSHAuth(object):
         mongo = MongoClient(mongo_host)
         self.db = mongo['sshauth']
         self.registry = self.db['registry']
+        self.failed_count = {}
+        self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
+        self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
+
+    def check_failed_count(self, username):
+        """
+        Return True if the user has too many failed attempts.
+        """
+        if username not in self.failed_count:
+            return False
+        fr = self.failed_count[username]
+        # Outside window
+        if (time() - fr['last']) >= self.MAX_FAILED_WINDOW:
+            del self.failed_count[username]
+            return False
+        # under max
+        if fr['count'] < self.MAX_FAILED:
+            return False
+        return True
+
+    def failed_login(self, username):
+        if username not in self.failed_count:
+            self.failed_count[username] = {'count': 0}
+        self.failed_count[username]['count'] += 1
+        self.failed_count[username]['last'] = time()
+
+    def reset_failed_count(self, username):
+        if username in self.failed_count:
+            del self.failed_count[username]
 
     def _run_command(self, command):
         try:

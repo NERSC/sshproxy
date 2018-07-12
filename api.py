@@ -33,10 +33,6 @@ app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
 
-# TODO: Move auth stuff into a separate module
-failed_count = {}
-MAX_FAILED = 5
-MAX_FAILED_WINDOW = 60 * 5
 
 class ctx(object):
     def __init__(self, type, username):
@@ -70,25 +66,6 @@ def get_skey(request):
         return None
     return None
 
-def _check_failed_count(username):
-    """
-    Return True if the user has too many failed attempts.
-    """
-    if username not in failed_count:
-        return False
-    fr = failed_count[username]
-    if fr['count'] >= MAX_FAILED and \
-       (time() - fr['last']) < MAX_FAILED_WINDOW:
-        return True
-    return False
-
-
-def _failed_login(username):
-    if username not in failed_count:
-        failed_count[username] = {'count': 0}
-    failed_count[username]['count'] += 1
-    failed_count['last'] = time()
-
 
 def doauth(headers):
     """
@@ -100,21 +77,21 @@ def doauth(headers):
     authh = headers['Authorization']
     if authh.startswith('Basic '):
         (username, password) = authh.replace('Basic ', '').split(':')
-        if _check_failed_count(username):
+        if ssh_auth.check_failed_count(username):
+            app.logger.warning('Too many failed logins %s' % (username))
             raise AuthError('Too many failed logins')
         if os.environ.get('FAKEAUTH') == "1":
             print "Fake Auth: %s" % (username)
             if password == 'bad':
-                _failed_login(username)
+                ssh_auth.failed_login(username)
                 raise AuthError('Bad fake password')
-            if username in failed_count:
-                del failed_count[username]
+            ssh_auth.reset_failed_count(username)
             return ctx('fake', username)
-        if not pam.authenticate(username, password, service='sshauth'):
-            _failed_login(username)
+        elif not pam.authenticate(username, password, service='sshauth'):
+            ssh_auth.failed_login(username)
+            app.logger.warning('failed login %s' % (username))
             raise AuthError("Failed login")
-        if username in failed_count:
-            del failed_count[username]
+        ssh_auth.reset_failed_count(username)
         return ctx('basic', username)
     else:
         raise ValueError("Unrecongnized authentication")
@@ -132,7 +109,6 @@ def create_pair_scope(scope):
         raddr = request.remote_addr
         resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey)
         app.logger.info('created %s' % (user))
-        print cert
         return resp + cert
     except AuthError:
         return "Authentication Failure", 403
