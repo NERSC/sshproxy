@@ -1,1 +1,6 @@
-@include common-auth
+auth        requisite   pam_nologin.so
+auth        [success=ignore default=2] pam_mfa.so ldap_server=ldaps://128.55.194.30 ldap_base=ou=people,ou=cori,ou=Host,o=ldapsvc,dc=nersc,dc=gov ldap_attr=mfa
+auth        sufficient  pam_linotp.so url=https://otpproxy.nersc.gov/validate/simplecheck nosslcertverify nosslhostnameverify realm=nersc hide_otp_input
+auth        requisite   pam_deny.so
+auth        include     common-auth
+#@include common-auth

@@ -27,7 +27,7 @@ from ssh_auth import SSHAuth
 import pam
 import os
 import json
-
+from time import time
 
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
@@ -68,18 +68,30 @@ def get_skey(request):
 
 
 def doauth(headers):
+    """
+    Authenticaiton function.  This currently just supports basic auth using
+    pam.
+    """
     if 'Authorization' not in headers:
         raise AuthError("No authentication provided")
     authh = headers['Authorization']
     if authh.startswith('Basic '):
         (username, password) = authh.replace('Basic ', '').split(':')
+        if ssh_auth.check_failed_count(username):
+            app.logger.warning('Too many failed logins %s' % (username))
+            raise AuthError('Too many failed logins')
         if os.environ.get('FAKEAUTH') == "1":
             print "Fake Auth: %s" % (username)
             if password == 'bad':
+                ssh_auth.failed_login(username)
                 raise AuthError('Bad fake password')
+            ssh_auth.reset_failed_count(username)
             return ctx('fake', username)
-        if not pam.authenticate(username, password, service='sshauth'):
+        elif not pam.authenticate(username, password, service='sshauth'):
+            ssh_auth.failed_login(username)
+            app.logger.warning('failed login %s' % (username))
             raise AuthError("Failed login")
+        ssh_auth.reset_failed_count(username)
         return ctx('basic', username)
     else:
         raise ValueError("Unrecongnized authentication")
@@ -97,7 +109,6 @@ def create_pair_scope(scope):
         raddr = request.remote_addr
         resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey)
         app.logger.info('created %s' % (user))
-        print cert
         return resp + cert
     except AuthError:
         return "Authentication Failure", 403
@@ -116,12 +127,35 @@ def create_pair():
     """
     try:
         ctx = doauth(request.headers)
-        raddr = request.remote_addr
+        raddr = request.access_route[-1]
         resp = ssh_auth.create_pair(ctx.username, raddr, None)
         app.logger.info('created %s' % (ctx.username))
         return resp
     except AuthError:
         return "Authentication Failure", 403
+    except:
+        return "Failure", 401
+
+@app.route('/sign_host/<scope>/', methods=['POST'])
+def sign_host(scope):
+    """
+    Create an RSA key pair and return the private key
+    """
+    try:
+        raddr = request.access_route[-1]
+        cert = ssh_auth.sign_host(raddr, scope)
+        app.logger.info('signed %s' % (raddr))
+        return cert
+    except:
+        return "Failure", 401
+
+@app.route('/get_ca_pubkey/<scope>/', methods=['GET'])
+def get_ca_pubkey(scope):
+    """
+    Used to retrieve the CA key for a scopeself.
+    """
+    try:
+        return ssh_auth.get_ca_pubkey(scope)
     except:
         return "Failure", 401
 
@@ -148,7 +182,7 @@ def reset():
     """
     try:
         ctx = doauth(request.headers)
-        ssh_auth.expireall(ctx.username)
+        ssh_auth.expireuser(ctx.username)
         return "Success"
     except AuthError:
         return "Authentication Failure", 403

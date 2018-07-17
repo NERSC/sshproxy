@@ -120,3 +120,14 @@ Then used the `AuthorizedKeysCommand` configuration option for sshd to have sshd
     AuthorizedKeysCommand /usr/lib/nersc-ssh-keys/NERSC-keys-api
     AuthorizedKeysCommandUser nobody
     AuthorizedKeysFile /dev/null
+
+#### TrustedUserKeys configuration
+
+TODO
+
+
+### TODOs
+
+* Add a status page
+* Expire by scope
+* Expire all

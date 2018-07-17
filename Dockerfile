@@ -2,7 +2,7 @@ FROM python:2.7
 
 ENV DEBIAN_FRONTEND=noninteractive
 ADD requirements.txt /tmp/requirements.txt
-RUN apt-get -y update && apt-get -y install nslcd libpam-dev && pip install -r /tmp/requirements.txt
+RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim && pip install -r /tmp/requirements.txt
 
 # LDAP
 ADD ldap /tmp/ldap
@@ -19,6 +19,13 @@ RUN \
    cd linotp-auth-pam && sh ./autogen.sh && ./configure && \
    make && cp src/.libs/*.so /lib/x86_64-linux-gnu/security/ && cd .. && rm -rf linotp-auth-pam
 
+# Install pam_mfa
+RUN \ 
+   apt-get -y update && apt-get -y install libldap-dev && \
+   git clone https://github.com/nersc/pam_mfa && \
+   cd pam_mfa && sed -i 's/-lldap/-lldap -lpam/' Makefile && \
+   sed -i 's|putenv|//putenv|' pam_mfa.c && \
+   make && cp *.so /lib/x86_64-linux-gnu/security/
 
 ADD . /src/
 RUN cp /src/sshauth.pam /etc/pam.d/sshauth
