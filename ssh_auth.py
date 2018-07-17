@@ -143,12 +143,15 @@ class SSHAuth(object):
         return cert
 
     def tmp_filename(self):
-        f = tempfile.NamedTemporaryFile(delete=False)
+        """
+        Allocate a temporary filename and delete it.
+        """
+        f = tempfile.NamedTemporaryFile(delete=True)
         f.close()
         return f.name
 
     def _generate_pair(self, user, serial=None, scope=None):
-        privfile = tmp_filename()
+        privfile = self.tmp_filename()
         pubfile = privfile + '.pub'
         if os.path.isfile(pubfile):
             raise OSError("file %s already exists" % pubfile)
@@ -160,7 +163,7 @@ class SSHAuth(object):
             pub = f.read().rstrip()
         with open(privfile, 'r') as f:
             priv = f.read()
-        cert = self._sign(fname, user, serial, scope)
+        cert = self._sign(privfile, user, serial, scope)
 
         os.remove(privfile)
         os.remove(pubfile)
@@ -257,9 +260,9 @@ class SSHAuth(object):
     def expireuser(self, user):
         up = {'$set': {'enabled': False}}
         self.registry.update({'principle': user}, up)
-        #self.registry.remove({'principle': user})
 
-def main(): # pragma: no cover
+
+def main():  # pragma: no cover
     s = SSHAuth('config.yaml')
     if len(sys.argv) > 2 and sys.argv[1] == 'create':
         user = sys.argv[2]

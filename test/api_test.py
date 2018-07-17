@@ -27,7 +27,6 @@ class APITestCase(unittest.TestCase):
         os.environ['FAKEAUTH'] = '1'
         test_dir = os.path.dirname(os.path.abspath(__file__)) + "/../test/"
         self.test_dir = test_dir
-        #os.environ['CONFIG'] = test_dir + '/config.yaml'
         import api
         self.api = api
         self.app = api.app.test_client()

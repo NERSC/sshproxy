@@ -27,7 +27,6 @@ from ssh_auth import SSHAuth
 import pam
 import os
 import json
-from time import time
 
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
@@ -136,6 +135,7 @@ def create_pair():
     except:
         return "Failure", 401
 
+
 @app.route('/sign_host/<scope>/', methods=['POST'])
 def sign_host(scope):
     """
@@ -148,6 +148,7 @@ def sign_host(scope):
         return cert
     except:
         return "Failure", 401
+
 
 @app.route('/get_ca_pubkey/<scope>/', methods=['GET'])
 def get_ca_pubkey(scope):
