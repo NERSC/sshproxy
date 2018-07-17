@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 import sys
 import os
+import os.path
 import subprocess
 from time import time
 import yaml
@@ -98,10 +99,12 @@ class SSHAuth(object):
         f = tempfile.NamedTemporaryFile(delete=False)
         f.close()
         return f.name
-    	
+
     def _generate_pair(self, user, scope=None):
         privfile = tmp_filename()
-        pubfile = tmp_filename()
+        pubfile = privfile + '.pub'
+        if os.path.isfile(pubfile):
+            raise OSError("file %s already exists" % pubfile)
         comm = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa']
         cert = None
         if self._run_command(comm) != 0:
