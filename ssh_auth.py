@@ -1,10 +1,12 @@
 from pymongo import MongoClient
 import sys
 import os
+import os.path
 import socket
 from subprocess import call, Popen, PIPE
 from time import time
 import yaml
+import tempfile
 
 
 class ScopeError(Exception):
@@ -140,24 +142,28 @@ class SSHAuth(object):
         os.remove(fn + '-cert.pub')
         return cert
 
+    def tmp_filename(self):
+        f = tempfile.NamedTemporaryFile(delete=False)
+        f.close()
+        return f.name
+
     def _generate_pair(self, user, serial=None, scope=None):
-        fname = 'tempfile'
-        if os.path.exists(fname):
-            os.remove(fname)
-        if os.path.exists(fname+'.pub'):
-            os.remove(fname+'.pub')
-        comm = ['ssh-keygen', '-q', '-f', fname, '-N', '', '-t', 'rsa']
+        privfile = tmp_filename()
+        pubfile = privfile + '.pub'
+        if os.path.isfile(pubfile):
+            raise OSError("file %s already exists" % pubfile)
+        comm = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa']
         cert = None
         if self._run_command(comm) != 0:
             raise OSError('Key generation failed')
-        with open(fname+'.pub', 'r') as f:
+        with open(pubfile, 'r') as f:
             pub = f.read().rstrip()
-        with open(fname, 'r') as f:
+        with open(privfile, 'r') as f:
             priv = f.read()
         cert = self._sign(fname, user, serial, scope)
 
-        os.remove(fname)
-        os.remove(fname+'.pub')
+        os.remove(privfile)
+        os.remove(pubfile)
         return pub, priv, cert
 
     def _get_host_key(self, raddr, type='rsa'):
