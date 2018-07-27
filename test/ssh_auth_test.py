@@ -23,6 +23,8 @@ from pymongo import MongoClient
 from time import time
 from ssh_auth import ScopeError
 
+_localhost = '127.0.0.1'
+
 
 class SSHAuthTestCase(unittest.TestCase):
 
@@ -33,6 +35,7 @@ class SSHAuthTestCase(unittest.TestCase):
         self.user = 'blah'
         self.registry = MongoClient()['sshauth']['registry']
         self.registry.remove()
+        self.host = os.environ.get('TESTIP', _localhost)
 
     def get_all(self):
         r = []
@@ -49,7 +52,7 @@ class SSHAuthTestCase(unittest.TestCase):
         Test create keys
         """
         self.registry.remove({})
-        p = self.ssh.create_pair(self.user, '127.0.0.1', None)
+        p = self.ssh.create_pair(self.user, _localhost, None)
         self.assertIsNotNone(p)
         k = self.get_all()
         self.assertEquals(len(k), 1)
@@ -60,14 +63,14 @@ class SSHAuthTestCase(unittest.TestCase):
         """
         with open('tempfile', 'w') as f:
             f.write('blah')
-        p = self.ssh.create_pair(self.user, '127.0.0.1', None)
+        p = self.ssh.create_pair(self.user, _localhost, None)
         self.assertIsNotNone(p)
 
     def test_get(self):
         """
         Test basic key retreival
         """
-        p = self.ssh.create_pair(self.user, '127.0.0.1', None)
+        p = self.ssh.create_pair(self.user, _localhost, None)
         self.assertIsNotNone(p)
         k = self.get_pub(self.user, 'default')
         keys = self.ssh.get_keys(self.user, 'default')
@@ -80,20 +83,20 @@ class SSHAuthTestCase(unittest.TestCase):
         scope1 = 'scope1'
         scope2 = 'scope2'
         secret = 'scope1-secret'
-        p = self.ssh.create_pair(self.user, '127.0.0.1', None)
+        p = self.ssh.create_pair(self.user, _localhost, None)
         self.assertIsNotNone(p)
-        p2 = self.ssh.create_pair(self.user, '127.0.0.1', scope1, skey=secret)
+        p2 = self.ssh.create_pair(self.user, _localhost, scope1, skey=secret)
         self.assertIsNotNone(p2)
         k = self.get_pub(self.user, scope1)
         keys = self.ssh.get_keys(self.user, scope1)
         self.assertIn(k, keys)
         keys = self.ssh.get_keys(self.user, 'default')
         self.assertNotIn(k, keys)
-        p = self.ssh.create_pair(self.user, '127.0.0.1', scope2)
+        p = self.ssh.create_pair(self.user, _localhost, scope2)
         self.assertIsNotNone(p)
 
     def test_check_scope(self):
-        p = self.ssh._check_scope(None, 'auser', '127.0.0.1', None)
+        p = self.ssh._check_scope(None, 'auser', _localhost, None)
         self.assertTrue(p)
 
     def test_allowed(self):
@@ -102,7 +105,7 @@ class SSHAuthTestCase(unittest.TestCase):
         with self.assertRaises(OSError):
             p = self.ssh._check_allowed('root', None)
         with self.assertRaises(OSError):
-            p = self.ssh.create_pair('root', '127.0.0.1', None)
+            p = self.ssh.create_pair('root', _localhost, None)
 
     def test_expiration_storage(self):
         slop = 1
@@ -111,7 +114,7 @@ class SSHAuthTestCase(unittest.TestCase):
         now = time()
         # Cleanup everything
         self.registry.remove()
-        p = self.ssh.create_pair(self.user, '127.0.0.1', scope2)
+        p = self.ssh.create_pair(self.user, _localhost, scope2)
         self.assertIsNotNone(p)
         rec = self.registry.find_one()
         exp = rec['expires']
@@ -125,9 +128,10 @@ class SSHAuthTestCase(unittest.TestCase):
         scope1 = 'scope1'
         scope2 = 'scope2'
         with self.assertRaises(OSError):
-            self.ssh.create_pair(self.user, '127.0.0.1', scope1, skey='wrong')
+            self.ssh.create_pair(self.user, _localhost, scope1, skey='wrong')
         with self.assertRaises(ScopeError):
-            self.ssh.create_pair(self.user, '127.0.0.1', 'bogus', skey='wrong')
+            self.ssh.create_pair(self.user, _localhost, 'bogus', skey='wrong')
+        # This is a bogus address that should fail
         with self.assertRaises(OSError):
             self.ssh.create_pair(self.user, '127.0.0.2', scope2)
         with self.assertRaises(ScopeError):
@@ -176,12 +180,12 @@ class SSHAuthTestCase(unittest.TestCase):
         Test _get_host_key
         """
         # Get the key for cori01-224
-        pub = self.ssh._get_host_key('128.55.224.31')
+        pub = self.ssh._get_host_key(self.host)
         self.assertEquals(pub[0:7], 'ssh-rsa')
 
+        # Test against a bogus host
         with self.assertRaises(OSError):
-            pub = self.ssh._get_host_key('127.0.0.2')
-            print(pub)
+            self.ssh._get_host_key('127.0.0.2')
 
     def test_sign_host(self):
         """
@@ -189,7 +193,7 @@ class SSHAuthTestCase(unittest.TestCase):
         """
         # Get the key for cori01-224
         self.registry.remove({})
-        cert = self.ssh.sign_host('128.55.224.31', 'scope3')
+        cert = self.ssh.sign_host(self.host, 'scope3')
         self.assertIsNotNone(cert)
         rec = self.registry.find_one()
         self.assertIsNotNone(rec)

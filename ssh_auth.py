@@ -123,19 +123,19 @@ class SSHAuth(object):
             return None
         if 'cacert' not in scope:
             return None
-        comm = ['ssh-keygen', '-s', scope['cacert'], '-z', serial]
+        command = ['ssh-keygen', '-s', scope['cacert'], '-z', serial]
         if scope.get('type') == 'host':
-            comm.append('-h')
+            command.append('-h')
             pname = 'host_%s' % (principle)
         else:
             pname = 'user_%s' % (principle)
-        comm.extend(['-I', pname, '-n', principle])
+        command.extend(['-I', pname, '-n', principle])
 
         if 'lifetime_secs' in scope:
-            comm.append('-V')
-            comm.append('+' + str(scope['lifetime_secs']))
-        comm.append(fn+'.pub')
-        if self._run_command(comm) != 0:
+            command.append('-V')
+            command.append('+' + str(scope['lifetime_secs']))
+        command.append(fn+'.pub')
+        if self._run_command(command) != 0:
             raise OSError('Signing failed')
         with open(fn+'-cert.pub', 'r') as f:
             cert = f.read().rstrip()
@@ -155,9 +155,13 @@ class SSHAuth(object):
         pubfile = privfile + '.pub'
         if os.path.isfile(pubfile):
             raise OSError("file %s already exists" % pubfile)
-        comm = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa']
+        comment = user
+        if serial is not None:
+            comment += ' serial:%s' % (serial)
+        command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
+                   '-C', comment]
         cert = None
-        if self._run_command(comm) != 0:
+        if self._run_command(command) != 0:
             raise OSError('Key generation failed')
         with open(pubfile, 'r') as f:
             pub = f.read().rstrip()

@@ -19,6 +19,7 @@
 import os
 import unittest
 from time import time
+from base64 import b64encode
 
 
 class APITestCase(unittest.TestCase):
@@ -30,10 +31,15 @@ class APITestCase(unittest.TestCase):
         import api
         self.api = api
         self.app = api.app.test_client()
-        self.headers = {'Authorization': 'Basic auser:password'}
-        self.badheaders = {'Authorization': 'Basic auser:bad'}
-        self.badmethod = {'Authorization': 'Blah auser:bad'}
+        self.headers = self.make_header('auser:password')
+        self.badheaders = self.make_header('auser:bad')
+        self.badmethod = {'Authorization': 'Blah ' + b64encode('auser:bad')}
+        self.leggood = {'Authorization': 'Basic auser:good'}
+        self.legbad = {'Authorization': 'Basic auser:bad'}
         self.api.ssh_auth.failed_count = {}
+
+    def make_header(self, authstr):
+        return {'Authorization': 'Basic '+b64encode(authstr)}
 
     def get_all(self):
         r = []
@@ -49,28 +55,33 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
         rv = self.app.post('/create_pair', headers=self.badheaders)
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
+        print rv.data
         rv = self.app.post('/create_pair', headers=self.badmethod)
         self.assertEquals(rv.status_code, 401)
         # Missing auth
         rv = self.app.post('/create_pair')
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
+        # Legacy auth
+        rv = self.app.post('/create_pair', headers=self.leggood)
+        self.assertEquals(rv.status_code, 200)
+        # Legacy bad auth
+        rv = self.app.post('/create_pair', headers=self.legbad)
+        self.assertEquals(rv.status_code, 401)
 
     def test_get_ca_pubkey(self):
         rv = self.app.get('/get_ca_pubkey/scope3/')
-        print(rv)
         self.assertEquals(rv.status_code, 200)
         self.assertIsNotNone(rv.data)
 
     def test_sign_host(self):
         rv = self.app.post('/sign_host/scope3/')
-        print(rv)
         self.assertEquals(rv.status_code, 200)
 
     def test_pam(self):
         del os.environ['FAKEAUTH']
         rv = self.app.post('/create_pair', headers=self.headers)
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
         os.environ['FAKEAUTH'] = '1'
 
     def test_create_pair_scope(self):
@@ -79,9 +90,9 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post(url, data=data, headers=self.headers)
         self.assertEquals(rv.status_code, 200)
         rv = self.app.post(url, data=data, headers=self.badheaders)
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
         rv = self.app.post(url, data=data, headers=self.badmethod)
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
         # No data
         rv = self.app.post(url, headers=self.headers)
         self.assertEquals(rv.status_code, 403)
@@ -99,37 +110,43 @@ class APITestCase(unittest.TestCase):
         rv = self.app.delete('/reset', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
         rv = self.app.delete('/reset', headers=self.badheaders)
-        self.assertEquals(rv.status_code, 403)
+        self.assertEquals(rv.status_code, 401)
         rv = self.app.delete('/reset', headers=self.badmethod)
         self.assertEquals(rv.status_code, 401)
 
-    def xtest_failed_count(self):
+    def test_failed_count(self):
         """
         Test Failed Count Logic
         """
         u = 'auser'
+        uri = '/create_pair'
         fc = self.api.ssh_auth.failed_count
         # Confirm it fails if user is over max and in window
-        rv = self.api.doauth({'Authorization': 'Basic auser:good'})
+        with self.api.app.test_request_context(uri, headers=self.headers):
+            rv = self.api.doauth()
         fc[u] = {'count': 5, 'last': time()}
-        with self.assertRaises(self.api.AuthError):
-            rv = self.api.doauth({'Authorization': 'Basic auser:good'})
+        with self.api.app.test_request_context(uri, headers=self.headers):
+            with self.assertRaises(self.api.AuthError):
+                rv = self.api.doauth()
         # Confirm it works if a good login happens after the window
         fc[u] = {'count': 5, 'last': time()-600}
-        rv = self.api.doauth({'Authorization': 'Basic auser:good'})
+        with self.api.app.test_request_context(uri, headers=self.headers):
+            rv = self.api.doauth()
         self.assertNotIn(u, fc)
         self.assertIsNotNone(rv)
         # Confirm it works if a good login happens under the max
         fc[u] = {'count': 4, 'last': time()}
-        rv = self.api.doauth({'Authorization': 'Basic auser:good'})
+        with self.api.app.test_request_context(uri, headers=self.headers):
+            rv = self.api.doauth()
         self.assertIsNotNone(rv)
         self.assertNotIn(u, fc)
         # Confirm failed count increments
         fc[u] = {'count': 4, 'last': time()}
-        with self.assertRaises(self.api.AuthError):
+        with self.api.app.test_request_context(uri, headers=self.badheaders):
             before = time()
-            rv = self.api.doauth({'Authorization': 'Basic auser:bad'})
-            self.assertItemsEquals(fc[u]['count'], 5)
+            with self.assertRaises(self.api.AuthError):
+                rv = self.api.doauth()
+            self.assertEquals(fc[u]['count'], 5)
             self.assertGreaterEqual(int(fc[u]['last']), int(before))
         fc = {}
 
