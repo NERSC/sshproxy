@@ -2,6 +2,8 @@
 
 source url.conf
 
-echo $URL
-USER=$1
-curl  -X GET ${URL}/get_keys/$1
+if [ ! -z $1 ]; then
+	USER=$1
+fi
+echo $URL/get_keys/$USER
+curl  -X GET ${URL}/get_keys/$USER

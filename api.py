@@ -21,7 +21,7 @@ modification, are permitted provided that the following conditions are met:
 See LICENSE for full text.
 """
 
-from flask import Flask, request
+from flask import Flask, request, Response
 import logging
 from ssh_auth import SSHAuth
 import pam
@@ -66,34 +66,69 @@ def get_skey(request):
     return None
 
 
-def doauth(headers):
+def legacyauth():
+    """
+    Support legacy auth for a limited time.
+    """
+    # Try legacy
+    if 'Authorization' not in request.headers:
+        return (None, None)
+    authh = request.headers['Authorization']
+    if not authh.startswith('Basic '):
+        return (None, None)
+    astr = authh.split(' ')[1]
+    (username, password) = astr.split(':')
+    return (username, password)
+
+
+def doauth():
     """
     Authenticaiton function.  This currently just supports basic auth using
     pam.
     """
-    if 'Authorization' not in headers:
-        raise AuthError("No authentication provided")
-    authh = headers['Authorization']
-    if authh.startswith('Basic '):
-        (username, password) = authh.replace('Basic ', '').split(':')
-        if ssh_auth.check_failed_count(username):
-            app.logger.warning('Too many failed logins %s' % (username))
-            raise AuthError('Too many failed logins')
-        if os.environ.get('FAKEAUTH') == "1":
-            app.logger.warning("Fake Auth: %s" % (username))
-            if password == 'bad':
-                ssh_auth.failed_login(username)
-                raise AuthError('Bad fake password')
-            ssh_auth.reset_failed_count(username)
-            return ctx('fake', username)
-        elif not pam.authenticate(username, password, service='sshauth'):
-            ssh_auth.failed_login(username)
-            app.logger.warning('failed login %s' % (username))
-            raise AuthError("Failed login")
-        ssh_auth.reset_failed_count(username)
-        return ctx('basic', username)
+    auth = request.authorization
+    if auth is not None:
+        if auth.username is None or auth.password is None:
+            raise AuthError("Username and password required")
+        username = auth.username
+        password = auth.password
+        authmode = 'basic'
     else:
-        raise ValueError("Unrecongnized authentication")
+        # This should eventually get dropped
+        (username, password) = legacyauth()
+        if username is None or password is None:
+            raise AuthError("Username and password required")
+        authmode = 'legacy'
+
+    if ssh_auth.check_failed_count(username):
+        raise AuthError('Too many failed logins %s' % (username))
+    if os.environ.get('FAKEAUTH') == "1":
+        app.logger.warning("Fake Auth: %s" % (username))
+        if password == 'bad':
+            ssh_auth.failed_login(username)
+            raise AuthError('Bad fake password')
+        authmode = 'fake'
+    elif not pam.authenticate(username, password, service='sshauth'):
+        ssh_auth.failed_login(username)
+        raise AuthError("Failed login: %s" % (username))
+    ssh_auth.reset_failed_count(username)
+    return ctx(authmode, username)
+
+
+def auth_failure(mess='FailedLogin'):
+    """Sends a 401 response that enables basic auth"""
+    app.logger.warning('Authentication Failure (%s).' % (mess))
+    return Response(
+        'Authentication failed. %s\n'
+        'Please provide a proper credential' % (mess), 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+
+def failure(funcname):
+    """Sends a 404"""
+    app.logger.warning('Unexpcted failure in %s.' % (funcname))
+    return Response(
+        'Request failed unexpectedly\n', 500)
 
 
 @app.route('/create_pair/<scope>/', methods=['POST'])
@@ -102,15 +137,15 @@ def create_pair_scope(scope):
     Create an RSA key pair and return the private key
     """
     try:
-        ctx = doauth(request.headers)
+        ctx = doauth()
         user = ctx.username
         skey = get_skey(request)
         raddr = request.remote_addr
         resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey)
         app.logger.info('created %s' % (user))
         return resp + cert
-    except AuthError:
-        return "Authentication Failure", 403
+    except AuthError as err:
+        return auth_failure(str(err))
     except OSError as err:
         app.logger.warning('raised OSError %s' % str(err))
         return str(err), 403
@@ -118,8 +153,7 @@ def create_pair_scope(scope):
         app.logger.warning('raised ValueError %s' % str(err))
         return str(err), 403
     except:
-        app.logger.warning('raised generic exception in create_pair_scope()')
-        return "Failure", 401
+        return failure('create_pair_scope')
 
 
 @app.route('/create_pair', methods=['POST'])
@@ -128,17 +162,15 @@ def create_pair():
     Create an RSA key pair and return the private key
     """
     try:
-        ctx = doauth(request.headers)
+        ctx = doauth()
         raddr = request.access_route[-1]
         resp = ssh_auth.create_pair(ctx.username, raddr, None)
         app.logger.info('created %s' % (ctx.username))
         return resp
-    except AuthError:
-        app.logger.warning('Authentication Failure for %s' % ctx.username)
-        return "Authentication Failure", 403
+    except AuthError as err:
+        return auth_failure(str(err))
     except:
-        app.logger.warning('raised generic exception in create_pair()')
-        return "Failure", 401
+        return failure('create_pair')
 
 
 @app.route('/sign_host/<scope>/', methods=['POST'])
@@ -152,8 +184,7 @@ def sign_host(scope):
         app.logger.info('signed %s' % (raddr))
         return cert
     except:
-        app.logger.warning('raised generic exception in sign_host()')
-        return "Failure", 401
+        return failure('sign_host')
 
 
 @app.route('/get_ca_pubkey/<scope>/', methods=['GET'])
@@ -164,8 +195,7 @@ def get_ca_pubkey(scope):
     try:
         return ssh_auth.get_ca_pubkey(scope)
     except:
-        app.logger.warning('raised generic exception in get_ca_pubkey()')
-        return "Failure", 401
+        return failure('get_ca_pubkey')
 
 
 @app.route('/get_keys/<username>', methods=['GET'])
@@ -181,8 +211,7 @@ def get_keys(username):
             mess += k + '\n'
         return mess
     except:
-        app.logger.warning('raised generic exception in get_keys()')
-        return "Failure", 401
+        return failure('get_keys')
 
 
 @app.route('/reset', methods=['DELETE'])
@@ -191,16 +220,14 @@ def reset():
     Get the keys for a user
     """
     try:
-        ctx = doauth(request.headers)
+        ctx = doauth()
         ssh_auth.expireuser(ctx.username)
         app.logger.info('resetting %s' % (ctx.username))
         return "Success"
-    except AuthError:
-        app.logger.warning('Authentication Failure for %s' % ctx.username)
-        return "Authentication Failure", 403
+    except AuthError as err:
+        return auth_failure(str(err))
     except:
-        app.logger.warning('raised generic exception in reset()')
-        return "Failure", 401
+        return failure('reset')
 
 
 # for the load balancer checks
