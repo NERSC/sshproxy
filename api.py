@@ -101,33 +101,34 @@ def doauth():
         authmode = 'legacy'
 
     if ssh_auth.check_failed_count(username):
-        app.logger.warning('Too many failed logins %s' % (username))
-        raise AuthError('Too many failed logins')
+        raise AuthError('Too many failed logins %s' % (username))
     if os.environ.get('FAKEAUTH') == "1":
+        app.logger.warning("Fake Auth: %s" % (username))
         if password == 'bad':
             ssh_auth.failed_login(username)
             raise AuthError('Bad fake password')
         authmode = 'fake'
     elif not pam.authenticate(username, password, service='sshauth'):
         ssh_auth.failed_login(username)
-        app.logger.warning('failed login %s' % (username))
-        raise AuthError("Failed login")
+        raise AuthError("Failed login: %s" % (username))
     ssh_auth.reset_failed_count(username)
     return ctx(authmode, username)
 
 
 def auth_failure(mess='FailedLogin'):
     """Sends a 401 response that enables basic auth"""
+    app.logger.warning('Authentication Failure (%s).' % (mess))
     return Response(
         'Authentication failed. %s\n'
         'Please provide a proper credential' % (mess), 401,
         {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 
-def failure():
+def failure(funcname):
     """Sends a 404"""
+    app.logger.warning('Unexpcted failure in %s.' % (funcname))
     return Response(
-        'Request failed unexpectedly\n', 404)
+        'Request failed unexpectedly\n', 500)
 
 
 @app.route('/create_pair/<scope>/', methods=['POST'])
@@ -146,9 +147,13 @@ def create_pair_scope(scope):
     except AuthError as err:
         return auth_failure(str(err))
     except OSError as err:
+        app.logger.warning('raised OSError %s' % str(err))
+        return str(err), 403
+    except ValueError as err:
+        app.logger.warning('raised ValueError %s' % str(err))
         return str(err), 403
     except:
-        return failure()
+        return failure('create_pair_scope')
 
 
 @app.route('/create_pair', methods=['POST'])
@@ -165,7 +170,7 @@ def create_pair():
     except AuthError as err:
         return auth_failure(str(err))
     except:
-        return "Failure", 404
+        return failure('create_pair')
 
 
 @app.route('/sign_host/<scope>/', methods=['POST'])
@@ -179,7 +184,7 @@ def sign_host(scope):
         app.logger.info('signed %s' % (raddr))
         return cert
     except:
-        return "Failure", 500
+        return failure('sign_host')
 
 
 @app.route('/get_ca_pubkey/<scope>/', methods=['GET'])
@@ -190,7 +195,7 @@ def get_ca_pubkey(scope):
     try:
         return ssh_auth.get_ca_pubkey(scope)
     except:
-        return "Failure", 500
+        return failure('get_ca_pubkey')
 
 
 @app.route('/get_keys/<username>', methods=['GET'])
@@ -199,13 +204,14 @@ def get_keys(username):
     Get the keys for a user
     """
     try:
+        app.logger.info('get keys for %s' % (username))
         keys = ssh_auth.get_keys(username, None)
         mess = ''
         for k in keys:
             mess += k + '\n'
         return mess
     except:
-        return "Failure", 401
+        return failure('get_keys')
 
 
 @app.route('/reset', methods=['DELETE'])
@@ -216,11 +222,12 @@ def reset():
     try:
         ctx = doauth()
         ssh_auth.expireuser(ctx.username)
+        app.logger.info('resetting %s' % (ctx.username))
         return "Success"
     except AuthError as err:
         return auth_failure(str(err))
     except:
-        return "Failure", 401
+        return failure('reset')
 
 
 # for the load balancer checks
