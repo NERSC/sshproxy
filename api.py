@@ -80,7 +80,7 @@ def doauth(headers):
             app.logger.warning('Too many failed logins %s' % (username))
             raise AuthError('Too many failed logins')
         if os.environ.get('FAKEAUTH') == "1":
-            print "Fake Auth: %s" % (username)
+            app.logger.warning("Fake Auth: %s" % (username))
             if password == 'bad':
                 ssh_auth.failed_login(username)
                 raise AuthError('Bad fake password')
@@ -112,10 +112,13 @@ def create_pair_scope(scope):
     except AuthError:
         return "Authentication Failure", 403
     except OSError as err:
+        app.logger.warning('raised OSError %s' % str(err))
         return str(err), 403
     except ValueError as err:
+        app.logger.warning('raised ValueError %s' % str(err))
         return str(err), 403
     except:
+        app.logger.warning('raised generic exception in create_pair_scope()')
         return "Failure", 401
 
 
@@ -131,8 +134,10 @@ def create_pair():
         app.logger.info('created %s' % (ctx.username))
         return resp
     except AuthError:
+        app.logger.warning('Authentication Failure for %s' % ctx.username)
         return "Authentication Failure", 403
     except:
+        app.logger.warning('raised generic exception in create_pair()')
         return "Failure", 401
 
 
@@ -147,6 +152,7 @@ def sign_host(scope):
         app.logger.info('signed %s' % (raddr))
         return cert
     except:
+        app.logger.warning('raised generic exception in sign_host()')
         return "Failure", 401
 
 
@@ -158,6 +164,7 @@ def get_ca_pubkey(scope):
     try:
         return ssh_auth.get_ca_pubkey(scope)
     except:
+        app.logger.warning('raised generic exception in get_ca_pubkey()')
         return "Failure", 401
 
 
@@ -167,12 +174,14 @@ def get_keys(username):
     Get the keys for a user
     """
     try:
+        app.logger.info('get keys for %s' % (username))
         keys = ssh_auth.get_keys(username, None)
         mess = ''
         for k in keys:
             mess += k + '\n'
         return mess
     except:
+        app.logger.warning('raised generic exception in get_keys()')
         return "Failure", 401
 
 
@@ -184,10 +193,13 @@ def reset():
     try:
         ctx = doauth(request.headers)
         ssh_auth.expireuser(ctx.username)
+        app.logger.info('resetting %s' % (ctx.username))
         return "Success"
     except AuthError:
+        app.logger.warning('Authentication Failure for %s' % ctx.username)
         return "Authentication Failure", 403
     except:
+        app.logger.warning('raised generic exception in reset()')
         return "Failure", 401
 
 
