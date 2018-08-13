@@ -27,6 +27,7 @@ from ssh_auth import SSHAuth
 import pam
 import os
 import json
+import sys
 
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
@@ -53,6 +54,9 @@ def setup_logging():
         # In production mode, add log handler to sys.stderr.
         app.logger.addHandler(logging.StreamHandler())
         app.logger.setLevel(logging.INFO)
+    else:
+        app.logger.addHandler(logging.StreamHandler(sys.stdout))
+        app.logger.setLevel(logging.DEBUG)
 
 
 def get_skey(request):
@@ -164,6 +168,7 @@ def create_pair():
     try:
         ctx = doauth()
         raddr = request.access_route[-1]
+        app.logger.info('raddr is %s' % raddr)
         resp = ssh_auth.create_pair(ctx.username, raddr, None)
         app.logger.info('created %s' % (ctx.username))
         return resp
