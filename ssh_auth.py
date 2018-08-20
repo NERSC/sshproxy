@@ -41,7 +41,7 @@ class SSHAuth(object):
         if 'mongo_host' in os.environ:
             mongo_host = os.environ['mongo_host']
         if mongo_host.startswith('mongodb://'):
-            (user, passwd, hosts, replset) = parse_mongo_url(mongo_host)
+            (user, passwd, hosts, replset) = self.parse_mongo_url(mongo_host)
             print '%s %s %s' % (user, hosts, replset)
             mongo = MongoClient(hosts, replicaset=replset)
         else:
@@ -57,7 +57,7 @@ class SSHAuth(object):
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
 
     # mongodb://$muser:$mpass@$n1,$n2,$n3/?replicaSet=$replset
-    def parse_mongo_url(url):
+    def parse_mongo_url(self, url):
         url = url.replace('mongodb://', '')
         (p1, p2) = url.split('/?')
         arr = p2.split('=')
