@@ -22,6 +22,8 @@ import ssh_auth
 from pymongo import MongoClient
 from time import time
 from ssh_auth import ScopeError
+from tempfile import mkstemp
+import yaml
 
 _localhost = '127.0.0.1'
 
@@ -231,6 +233,33 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertEquals(self.ssh.failed_count[u]['count'], 5)
         self.assertGreaterEqual(self.ssh.failed_count[u]['last'], before)
         self.ssh.failed_count = {}
+
+    def test_reload(self):
+        """
+        Test Reloading Config
+        """
+        fh, cfile = mkstemp()
+        nscope = 'newscope'
+        conf = yaml.load(open(self.test_dir+'/config.yaml'))
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        ssh = ssh_auth.SSHAuth(cfile)
+        self.assertNotIn(nscope, ssh.scopes)
+        with self.assertRaises(ScopeError):
+            ssh.create_pair(self.user, _localhost, nscope)
+        # Add a test trying to create in newscope
+        conf['scopes'][nscope] = {'lifetime': '2y'}
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        ssh.create_pair(self.user, _localhost, nscope)
+        self.assertIn(nscope, ssh.scopes)
+        # Add a test to create in newscope
+        del conf['scopes'][nscope]
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        with self.assertRaises(ScopeError):
+            ssh.create_pair(self.user, _localhost, nscope)
+        os.remove(cfile)
 
 
 if __name__ == '__main__':

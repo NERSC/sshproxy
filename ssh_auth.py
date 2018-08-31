@@ -28,7 +28,18 @@ class SSHAuth(object):
         """
         Create an instance of the ssh Auth manager.
         """
-        self.config = yaml.load(open(configfile))
+        self.configfile = configfile
+        self.lastconfig = None
+        self.reload_config()
+
+    def reload_config(self):
+        sd = os.stat(self.configfile)
+        mtime = sd.st_mtime
+        if mtime == self.lastconfig:
+            return
+        if self.lastconfig is not None:
+            print("Re-loading config")
+        self.config = yaml.load(open(self.configfile))
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
         self.scopes = self.config['scopes']
@@ -46,6 +57,7 @@ class SSHAuth(object):
         self.failed_count = {}
         self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
+        self.lastconfig = mtime
 
     def check_failed_count(self, username):
         """
@@ -227,6 +239,7 @@ class SSHAuth(object):
         return cert
 
     def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
+        self.reload_config()
         if scope is not None:
             self._check_scope(scope, user, raddr, skey)
             if 'lifetime_secs' in self.scopes[scope]:
