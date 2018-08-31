@@ -94,10 +94,16 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertNotIn(k, keys)
         p = self.ssh.create_pair(self.user, _localhost, scope2)
         self.assertIsNotNone(p)
+        with self.assertRaises(OSError):
+            p = self.ssh.create_pair(self.user, _localhost, 'scope4')
 
     def test_check_scope(self):
         p = self.ssh._check_scope(None, 'auser', _localhost, None)
         self.assertTrue(p)
+        p = self.ssh._check_scope('scope4', 'auser', _localhost, None)
+        self.assertTrue(p)
+        with self.assertRaises(OSError):
+            p = self.ssh._check_scope('scope4', 'buser', _localhost, None)
 
     def test_allowed(self):
         p = self.ssh._check_allowed('auser', None)

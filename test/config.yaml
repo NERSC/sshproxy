@@ -17,4 +17,8 @@ scopes:
      type: host
      cacert: ./cacert
      lifetime: 1y
+  scope4:
+     lifetime: 1d
+     allowed_users:
+       - auser
 ...

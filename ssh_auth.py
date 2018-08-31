@@ -92,6 +92,9 @@ class SSHAuth(object):
         if 'allowed_create_addrs' in scope and \
            raddr not in scope['allowed_create_addrs']:
             raise OSError("host not in allowed host for scope")
+        if 'allowed_users' in scope and \
+           user not in scope['allowed_users']:
+            raise OSError("User not in allowed users for scope")
         return True
 
     def _check_allowed(self, user, scope):
