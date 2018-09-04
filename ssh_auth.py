@@ -59,6 +59,7 @@ class SSHAuth(object):
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
         self.lastconfig = mtime
 
+
     def check_failed_count(self, username):
         """
         Return True if the user has too many failed attempts.
@@ -86,6 +87,7 @@ class SSHAuth(object):
             del self.failed_count[username]
 
     def _run_command(self, command):
+        print '_run_command(): %s' % command
         try:
             errno = call(command)
         except Exception as err:
@@ -104,9 +106,13 @@ class SSHAuth(object):
         if 'allowed_create_addrs' in scope and \
            raddr not in scope['allowed_create_addrs']:
             raise OSError("host not in allowed host for scope")
+        if 'allowed_users' in scope and \
+           user not in scope['allowed_users']:
+            raise OSError("User not in allowed users for scope")
         return True
 
     def _check_allowed(self, user, scope):
+        print "_check_allowed()"
         if user in self.unallowed_users:
             raise OSError("user %s not allowed" % (user))
         # TODO: Add scope version too
@@ -128,6 +134,7 @@ class SSHAuth(object):
             raise ValueError("Unrecongnized lifetime")
 
     def _sign(self, fn, principle, serial, scopename):
+        print "_sign(%s, %s, %s, %s)" % (fn, principle, serial, scopename)
         if scopename is None:
             return None
         scope = self.scopes.get(scopename)
@@ -163,8 +170,10 @@ class SSHAuth(object):
         return f.name
 
     def _generate_pair(self, user, serial=None, scope=None):
+        print "_generate_pair(%s, %s, %s)" % (user, serial, scope)
         privfile = self.tmp_filename()
         pubfile = privfile + '.pub'
+        print "privfile=%s pubfile=%s" % (privfile, pubfile)
         if os.path.isfile(pubfile):
             raise OSError("file %s already exists" % pubfile)
         comment = user
@@ -172,12 +181,17 @@ class SSHAuth(object):
             comment += ' serial:%s' % (serial)
         command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
                    '-C', comment]
+        print "command: %s" % command
         cert = None
         if self._run_command(command) != 0:
+            print "raise OS error"
             raise OSError('Key generation failed')
+        print "ran command"
         with open(pubfile, 'r') as f:
+            print "opening %s" % pubfile
             pub = f.read().rstrip()
         with open(privfile, 'r') as f:
+            print "opening %s" % privfile
             priv = f.read()
         cert = self._sign(privfile, user, serial, scope)
 
@@ -239,14 +253,18 @@ class SSHAuth(object):
         return cert
 
     def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
+        print "create_pair()"
         self.reload_config()
         if scope is not None:
+            print "scope is %s" % scope
             self._check_scope(scope, user, raddr, skey)
             if 'lifetime_secs' in self.scopes[scope]:
                 lifetime = self.scopes[scope]['lifetime_secs']
         self._check_allowed(user, scope)
         serial = self._get_serial()
+        print "serial is %s" % serial
         pub, priv, cert = self._generate_pair(user, serial=serial, scope=scope)
+        print "past _generate_pair()"
         if scope is None:
             scope = 'default'
         rec = {'principle': user,
