@@ -57,7 +57,7 @@ class APITestCase(unittest.TestCase):
 
     def test_version(self):
         rv = self.app.get('/version', headers=self.headers)
-        self.assertGreater(float(rv.data), 2.0)
+        self.assertGreater(float(rv.data), 0.9)
 
     def test_create_pair(self):
         rv = self.app.post('/create_pair', headers=self.headers)

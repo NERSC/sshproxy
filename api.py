@@ -33,7 +33,7 @@ app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
 
-_VERSION="2.4"
+_VERSION="1.0"
 
 
 class ctx(object):
