@@ -20,6 +20,8 @@ def parse_args():
     parser.add_argument('--scope', '-s', help='name of scope')
     parser.add_argument('--legacy', '-l', help='Pass auth credentials in '
                         'legacy format.', action='store_true')
+    parser.add_argument('--debug', '-d', help='additional debug',
+                        action='store_true')
     parser.add_argument('--key', '-k', help='prompt for skey',
                         action='store_true')
     parser.add_argument('--url', dest='url', help='url for service',
@@ -73,7 +75,8 @@ def main():
         else:
             pstr = b64encode('%s:%s' % (user, pwd))
         h = {'Authorization': 'Basic %s' % (pstr)}
-        print url, h
+        if args.debug:
+            print url, h
         resp = requests.post(url, headers=h, data=data)
         if resp.status_code != 200:
             retry += 1
