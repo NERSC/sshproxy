@@ -47,7 +47,6 @@ class SSHAuth(object):
         self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
 
-
     def check_failed_count(self, username):
         """
         Return True if the user has too many failed attempts.
@@ -272,12 +271,19 @@ class SSHAuth(object):
         q = {'principle': user, 'enabled': True}
         if scope is not None:
             q['scope'] = scope
+            if scope not in self.scopes:
+                raise ScopeError()
+
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
             else:
                 resp.append(rec['pubkey'])
         return resp
+
+    def expire(self, id):
+        up = {'$set': {'enabled': False}}
+        self.registry.update({'_id': id}, up)
 
     def expireuser(self, user):
         up = {'$set': {'enabled': False}}

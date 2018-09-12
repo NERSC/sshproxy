@@ -127,6 +127,35 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertGreaterEqual(exp, now + DAY - slop)
         self.assertLess(exp, now + DAY + slop)
 
+    def test_autoexpire(self):
+        rec = {'principle': 'auser',
+               'pubkey': 'bogus1',
+               'type': 'user',
+               'enabled': True,
+               'scope': 'default',
+               'serial': 'bogus1',
+               'created': time(),
+               'expires': time() - 100
+               }
+        rec1 = self.registry.insert(rec)
+        rec = {'principle': 'auser',
+               'pubkey': 'bogus2',
+               'type': 'user',
+               'enabled': True,
+               'scope': 'default',
+               'serial': 'bogus2',
+               'created': time(),
+               'expires': time() + 100
+               }
+        rec2 = self.registry.insert(rec)
+        p = self.ssh.get_keys('auser')
+        self.assertIn('bogus2', p)
+        self.assertNotIn('bogus1', p)
+        up = self.registry.find_one({'_id': rec1})
+        self.assertFalse(up['enabled'])
+        up = self.registry.find_one({'_id': rec2})
+        self.assertTrue(up['enabled'])
+
     def test_scope_errors(self):
         """
         Test that scopes work.
