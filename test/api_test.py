@@ -51,6 +51,14 @@ class APITestCase(unittest.TestCase):
         r = self.registry.find_one({'user': user, 'scope': scope})
         return r['pubkey']
 
+    def test_status(self):
+        rv = self.app.get('/status.html', headers=self.headers)
+        self.assertEquals(rv.data, "OK")
+
+    def test_version(self):
+        rv = self.app.get('/version', headers=self.headers)
+        self.assertGreater(float(rv.data), 0.9)
+
     def test_create_pair(self):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
