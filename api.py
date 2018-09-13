@@ -32,9 +32,7 @@ import sys
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
-_VERSION = "1.1"
-
-_VERSION="1.0"
+_VERSION = "1.0"
 
 
 class ctx(object):
@@ -253,10 +251,6 @@ def reset():
     except:
         return failure('reset')
 
-# for the load balancer checks
-@app.route('/version', methods=['GET'])
-def version():
-    return _VERSION
 
 # Return the version
 @app.route('/version', methods=['GET'])
