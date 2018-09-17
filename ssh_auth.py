@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, MongoReplicaSetClient
 import sys
 import os
 import os.path
@@ -32,6 +32,22 @@ class SSHAuth(object):
         self.lastconfig = None
         self.reload_config()
 
+        mongo_host = 'localhost'
+        if 'mongo_host' in os.environ:
+            mongo_host = os.environ['mongo_host']
+        if mongo_host.startswith('mongodb://'):
+            (user, passwd, hosts, replset) = self.parse_mongo_url(mongo_host)
+            print '%s %s %s' % (user, hosts, replset)
+            mongo = MongoReplicaSetClient(hosts, replicaset=replset)
+        else:
+            mongo = MongoClient(mongo_host)
+            user = None
+            passwd = None
+        self.db = mongo['sshauth']
+        if user is not None and passwd is not None:
+            self.db.authenticate(user, passwd, source='admin')
+        self.registry = self.db['registry']
+
     def reload_config(self):
         sd = os.stat(self.configfile)
         mtime = sd.st_mtime
@@ -47,22 +63,6 @@ class SSHAuth(object):
             scope = self.scopes[scopen]
             if 'lifetime' in scope:
                 scope['lifetime_secs'] = self._convert_time(scope['lifetime'])
-
-        mongo_host = 'localhost'
-        if 'mongo_host' in os.environ:
-            mongo_host = os.environ['mongo_host']
-        if mongo_host.startswith('mongodb://'):
-            (user, passwd, hosts, replset) = self.parse_mongo_url(mongo_host)
-            print '%s %s %s' % (user, hosts, replset)
-            mongo = MongoClient(hosts, replicaset=replset)
-        else:
-            mongo = MongoClient(mongo_host)
-            user = None
-            passwd = None
-        self.db = mongo['sshauth']
-        if user is not None and passwd is not None:
-            self.db.authenticate(user, passwd, source='admin')
-        self.registry = self.db['registry']
         self.failed_count = {}
         self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
