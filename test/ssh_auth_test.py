@@ -22,6 +22,8 @@ import ssh_auth
 from pymongo import MongoClient
 from time import time
 from ssh_auth import ScopeError
+from tempfile import mkstemp
+import yaml
 
 _localhost = '127.0.0.1'
 
@@ -94,10 +96,16 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertNotIn(k, keys)
         p = self.ssh.create_pair(self.user, _localhost, scope2)
         self.assertIsNotNone(p)
+        with self.assertRaises(OSError):
+            p = self.ssh.create_pair(self.user, _localhost, 'scope4')
 
     def test_check_scope(self):
         p = self.ssh._check_scope(None, 'auser', _localhost, None)
         self.assertTrue(p)
+        p = self.ssh._check_scope('scope4', 'auser', _localhost, None)
+        self.assertTrue(p)
+        with self.assertRaises(OSError):
+            p = self.ssh._check_scope('scope4', 'buser', _localhost, None)
 
     def test_allowed(self):
         p = self.ssh._check_allowed('auser', None)
@@ -120,6 +128,35 @@ class SSHAuthTestCase(unittest.TestCase):
         exp = rec['expires']
         self.assertGreaterEqual(exp, now + DAY - slop)
         self.assertLess(exp, now + DAY + slop)
+
+    def test_autoexpire(self):
+        rec = {'principle': 'auser',
+               'pubkey': 'bogus1',
+               'type': 'user',
+               'enabled': True,
+               'scope': 'default',
+               'serial': 'bogus1',
+               'created': time(),
+               'expires': time() - 100
+               }
+        rec1 = self.registry.insert(rec)
+        rec = {'principle': 'auser',
+               'pubkey': 'bogus2',
+               'type': 'user',
+               'enabled': True,
+               'scope': 'default',
+               'serial': 'bogus2',
+               'created': time(),
+               'expires': time() + 100
+               }
+        rec2 = self.registry.insert(rec)
+        p = self.ssh.get_keys('auser')
+        self.assertIn('bogus2', p)
+        self.assertNotIn('bogus1', p)
+        up = self.registry.find_one({'_id': rec1})
+        self.assertFalse(up['enabled'])
+        up = self.registry.find_one({'_id': rec2})
+        self.assertTrue(up['enabled'])
 
     def test_scope_errors(self):
         """
@@ -231,6 +268,33 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertEquals(self.ssh.failed_count[u]['count'], 5)
         self.assertGreaterEqual(self.ssh.failed_count[u]['last'], before)
         self.ssh.failed_count = {}
+
+    def test_reload(self):
+        """
+        Test Reloading Config
+        """
+        fh, cfile = mkstemp()
+        nscope = 'newscope'
+        conf = yaml.load(open(self.test_dir+'/config.yaml'))
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        ssh = ssh_auth.SSHAuth(cfile)
+        self.assertNotIn(nscope, ssh.scopes)
+        with self.assertRaises(ScopeError):
+            ssh.create_pair(self.user, _localhost, nscope)
+        # Add a test trying to create in newscope
+        conf['scopes'][nscope] = {'lifetime': '2y'}
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        ssh.create_pair(self.user, _localhost, nscope)
+        self.assertIn(nscope, ssh.scopes)
+        # Add a test to create in newscope
+        del conf['scopes'][nscope]
+        with open(cfile, "w") as outfile:
+            yaml.dump(conf, outfile, default_flow_style=False)
+        with self.assertRaises(ScopeError):
+            ssh.create_pair(self.user, _localhost, nscope)
+        os.remove(cfile)
 
 
 if __name__ == '__main__':

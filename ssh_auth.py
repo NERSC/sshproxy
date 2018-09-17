@@ -28,7 +28,18 @@ class SSHAuth(object):
         """
         Create an instance of the ssh Auth manager.
         """
-        self.config = yaml.load(open(configfile))
+        self.configfile = configfile
+        self.lastconfig = None
+        self.reload_config()
+
+    def reload_config(self):
+        sd = os.stat(self.configfile)
+        mtime = sd.st_mtime
+        if mtime == self.lastconfig:
+            return
+        if self.lastconfig is not None:
+            print("Re-loading config")
+        self.config = yaml.load(open(self.configfile))
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
         self.scopes = self.config['scopes']
@@ -55,6 +66,7 @@ class SSHAuth(object):
         self.failed_count = {}
         self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
+        self.lastconfig = mtime
 
     # mongodb://$muser:$mpass@$n1,$n2,$n3/?replicaSet=$replset
     def parse_mongo_url(self, url):
@@ -67,7 +79,6 @@ class SSHAuth(object):
         (user, passwd) = userpasswd.split(':', 1)
         hosts = hoststr.split(',')
         return (user, passwd, hosts, replset)
-
 
     def check_failed_count(self, username):
         """
@@ -115,6 +126,9 @@ class SSHAuth(object):
         if 'allowed_create_addrs' in scope and \
            raddr not in scope['allowed_create_addrs']:
             raise OSError("host not in allowed host for scope")
+        if 'allowed_users' in scope and \
+           user not in scope['allowed_users']:
+            raise OSError("User not in allowed users for scope")
         return True
 
     def _check_allowed(self, user, scope):
@@ -260,6 +274,7 @@ class SSHAuth(object):
 
     def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
         print "create_pair()"
+        self.reload_config()
         if scope is not None:
             print "scope is %s" % scope
             self._check_scope(scope, user, raddr, skey)
@@ -290,12 +305,19 @@ class SSHAuth(object):
         q = {'principle': user, 'enabled': True}
         if scope is not None:
             q['scope'] = scope
+            if scope not in self.scopes:
+                raise ScopeError()
+
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
             else:
                 resp.append(rec['pubkey'])
         return resp
+
+    def expire(self, id):
+        up = {'$set': {'enabled': False}}
+        self.registry.update({'_id': id}, up)
 
     def expireuser(self, user):
         up = {'$set': {'enabled': False}}

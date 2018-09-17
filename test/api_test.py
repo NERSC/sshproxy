@@ -51,6 +51,14 @@ class APITestCase(unittest.TestCase):
         r = self.registry.find_one({'user': user, 'scope': scope})
         return r['pubkey']
 
+    def test_status(self):
+        rv = self.app.get('/status.html', headers=self.headers)
+        self.assertEquals(rv.data, "OK")
+
+    def test_version(self):
+        rv = self.app.get('/version', headers=self.headers)
+        self.assertGreater(float(rv.data), 0.9)
+
     def test_create_pair(self):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
@@ -83,6 +91,21 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 401)
         os.environ['FAKEAUTH'] = '1'
+
+    def test_get_keys_scope(self):
+        data = '{"skey": "scope1-secret"}'
+        url = '/create_pair/scope1/'
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 200)
+        rv = self.app.get('/get_keys/scope1/auser')
+        self.assertEquals(rv.status_code, 200)
+        self.assertIn('auser', rv.data)
+        self.assertIn('ssh-rsa', rv.data)
+        rv = self.app.get('/get_keys/bogus/auser')
+        self.assertEquals(rv.status_code, 500)
+        rv = self.app.get('/get_keys/scope3/auser')
+        self.assertEquals(rv.status_code, 200)
+        self.assertEquals('', rv.data)
 
     def test_create_pair_scope(self):
         data = '{"skey": "scope1-secret"}'

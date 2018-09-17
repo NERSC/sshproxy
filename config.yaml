@@ -1,0 +1,17 @@
+---
+global:
+  mongo_host: localhost
+  mongo_db: sshauth
+  registry: registry
+scopes:
+  jupyter:
+     skey: Jupyter!
+     cacert: ./cacert
+  test:
+     skey: MyTest!
+     cacert: ./test/user_ca
+     lifetime: 1d
+  local:
+     allowed_create_addrs:
+       - 127.0.0.1
+...
