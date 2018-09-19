@@ -22,6 +22,7 @@ import ssh_auth
 from pymongo import MongoClient
 from time import time
 from ssh_auth import ScopeError
+from subprocess import Popen, PIPE
 from tempfile import mkstemp
 import yaml
 
@@ -91,7 +92,11 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIsNotNone(p2)
         k = self.get_pub(self.user, scope1)
         keys = self.ssh.get_keys(self.user, scope1)
-        self.assertIn(k, keys)
+        found = False
+        for key in keys:
+            if k in key:
+                found = True
+        self.assertTrue(found)
         keys = self.ssh.get_keys(self.user, 'default')
         self.assertNotIn(k, keys)
         p = self.ssh.create_pair(self.user, _localhost, scope2)
@@ -114,6 +119,31 @@ class SSHAuthTestCase(unittest.TestCase):
             p = self.ssh._check_allowed('root', None)
         with self.assertRaises(OSError):
             p = self.ssh.create_pair('root', _localhost, None)
+
+    def test_allowed_host(self):
+        scope1 = 'scope1'
+        secret = 'scope1-secret'
+        certkey = 'temp-cert.pub'
+        p = self.ssh.create_pair(self.user, _localhost, scope1, skey=secret)
+        cert = p[1].split('\n')[-1]
+        with open(certkey, 'w') as f:
+            f.write(cert)
+        command = ['ssh-keygen', '-f', certkey, '-L']
+        p = Popen(command, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = p.communicate()
+        found = False
+        for line in stdout.split('\n'):
+            if line.find('source-address 127.0.0.1') > 0:
+                found = True
+        self.assertTrue(found)
+        os.unlink(certkey)
+        keys = self.ssh.get_keys(self.user)
+        found = False
+        for k in keys:
+            if k.startswith('from="127.0.0.1"') > 0:
+                print(k)
+                found = True
+        self.assertTrue(found)
 
     def test_expiration_storage(self):
         slop = 1
