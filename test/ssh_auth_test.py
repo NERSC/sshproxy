@@ -18,12 +18,13 @@
 
 import os
 import unittest
-import ssh_auth
 from pymongo import MongoClient
 from time import time
-from ssh_auth import ScopeError
+from ssh_auth import SSHAuth, ScopeError, CollabError
 from tempfile import mkstemp
 import yaml
+from subprocess import Popen, PIPE
+from mock import MagicMock
 
 _localhost = '127.0.0.1'
 
@@ -33,7 +34,7 @@ class SSHAuthTestCase(unittest.TestCase):
     def setUp(self):
         test_dir = os.path.dirname(os.path.abspath(__file__)) + "/../test/"
         self.test_dir = test_dir
-        self.ssh = ssh_auth.SSHAuth(test_dir+'/config.yaml')
+        self.ssh = SSHAuth(test_dir+'/config.yaml')
         self.user = 'blah'
         self.registry = MongoClient()['sshauth']['registry']
         self.registry.remove()
@@ -48,6 +49,22 @@ class SSHAuthTestCase(unittest.TestCase):
     def get_pub(self, user, scope):
         r = self.registry.find_one({'principle': user, 'scope': scope})
         return r['pubkey']
+
+    def read_cert(self, cert):
+        p = Popen(['ssh-keygen', '-f', '-', '-L'], stdout=PIPE, stdin=PIPE,
+                  stderr=None)
+        out = p.communicate(input=cert)[0]
+        return out
+
+    def get_prin(self, certtext):
+        # Extract the principal
+        in_prin = False
+        for line in certtext.split('\n'):
+            if line.find('Principals') > 0:
+                in_prin = True
+            elif in_prin:
+                return line.replace(' ', '')
+        return None
 
     def test_create(self):
         """
@@ -99,13 +116,42 @@ class SSHAuthTestCase(unittest.TestCase):
         with self.assertRaises(OSError):
             p = self.ssh.create_pair(self.user, _localhost, 'scope4')
 
+    def test_collab_scope(self):
+        """
+        Test that scopes with collaborations works.
+        """
+        scope5 = 'scope5'
+        tuser = 'tuser'
+        with self.assertRaises(ScopeError):
+            p = self.ssh.create_pair(self.user, _localhost, scope5)
+        with self.assertRaises(CollabError):
+            p, c = self.ssh.create_pair(self.user, _localhost, scope5,
+                                        target_user=tuser)
+        self.ssh._check_collaboration_account = MagicMock(return_value=True)
+        p, c = self.ssh.create_pair(self.user, _localhost, scope5,
+                                    target_user=tuser)
+        cout = self.read_cert(c)
+        principal = self.get_prin(cout)
+        self.assertEquals(principal, tuser)
+        self.assertIsNotNone(p)
+        r = self.registry.find_one({'principle': self.user, 'scope': scope5})
+        self.assertIn('target_user', r)
+        self.assertTrue(r['pubkey'].find(self.user+' as '+tuser) > 0)
+        # Confirm that no entries are returned for the actual user
+        keys = self.ssh.get_keys(self.user)
+        self.assertEquals(keys, [])
+        # Confirm we get a key for the target_user (e.g. collab account)
+        keys = self.ssh.get_keys(tuser)
+        self.assertIsNotNone(keys)
+
     def test_check_scope(self):
-        p = self.ssh._check_scope(None, 'auser', _localhost, None)
-        self.assertTrue(p)
-        p = self.ssh._check_scope('scope4', 'auser', _localhost, None)
+        with self.assertRaises(ScopeError):
+            p = self.ssh._check_scope(None, 'auser', _localhost, None)
+        scope = self.ssh._get_scope('scope4')
+        p = self.ssh._check_scope(scope, 'auser', _localhost, None)
         self.assertTrue(p)
         with self.assertRaises(OSError):
-            p = self.ssh._check_scope('scope4', 'buser', _localhost, None)
+            p = self.ssh._check_scope(scope, 'buser', _localhost, None)
 
     def test_allowed(self):
         p = self.ssh._check_allowed('auser', None)
@@ -278,7 +324,7 @@ class SSHAuthTestCase(unittest.TestCase):
         conf = yaml.load(open(self.test_dir+'/config.yaml'))
         with open(cfile, "w") as outfile:
             yaml.dump(conf, outfile, default_flow_style=False)
-        ssh = ssh_auth.SSHAuth(cfile)
+        ssh = SSHAuth(cfile)
         self.assertNotIn(nscope, ssh.scopes)
         with self.assertRaises(ScopeError):
             ssh.create_pair(self.user, _localhost, nscope)

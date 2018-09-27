@@ -5,6 +5,8 @@ global:
   registry: registry
   unallowed_users: [ 'root', 'cuser' ]
 scopes:
+  default:
+     lifetime: 1d
   scope1:
      skey: scope1-secret
      cacert: ./cacert
@@ -21,4 +23,8 @@ scopes:
      lifetime: 1d
      allowed_users:
        - auser
+  scope5:
+     lifetime: 1y
+     collaboration: True
+     cacert: ./cacert
 ...

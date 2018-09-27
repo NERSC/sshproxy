@@ -20,6 +20,7 @@ import os
 import unittest
 from time import time
 from base64 import b64encode
+from mock import MagicMock
 
 
 class APITestCase(unittest.TestCase):
@@ -122,6 +123,30 @@ class APITestCase(unittest.TestCase):
         # No skey
         rv = self.app.post(url, data='{"a": "b"}', headers=self.headers)
         self.assertEquals(rv.status_code, 403)
+
+    def test_create_pair_collab(self):
+        data = '{"target_user": "tuser"}'
+        url = '/create_pair/scope5/'
+        # Mock _check_collaboration_account because we don't
+        # want to modify any groups
+        old = self.api.ssh_auth._check_collaboration_account
+        self.api.ssh_auth._check_collaboration_account = \
+            MagicMock(return_value=True)
+        # Happy test.  Make sure that the key indicates it is for the
+        # test user
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 200)
+        self.assertIn('auser as tuser', rv.data)
+        # Missing target_user should return a 401
+        rv = self.app.post(url, headers=self.headers)
+        self.assertEquals(rv.status_code, 401)
+        # User not in group should return a 403
+        self.api.ssh_auth._check_collaboration_account = \
+            MagicMock(return_value=False)
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 403)
+        # reset things
+        self.api.ssh_auth._check_collaboration_account = old
 
     def test_get_keys(self):
         rv = self.app.get('/get_keys/auser')
