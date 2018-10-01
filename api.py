@@ -32,7 +32,7 @@ import sys
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
-_VERSION = "1.0"
+_VERSION = "1.1"
 
 
 class ctx(object):
