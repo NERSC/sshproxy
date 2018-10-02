@@ -169,6 +169,10 @@ class SSHAuth(object):
         else:
             pname = 'user_%s' % (principle)
         command.extend(['-I', pname, '-n', principle])
+        if scope is not None and 'allowed_hosts' in scope:
+            allowed_hosts = scope['allowed_hosts']
+            command.extend(['-O', 'source-address=' +
+                            ','.join(allowed_hosts)])
 
         if 'lifetime_secs' in scope:
             command.append('-V')
@@ -304,15 +308,23 @@ class SSHAuth(object):
         now = time()
         q = {'principle': user, 'enabled': True}
         if scope is not None:
-            q['scope'] = scope
             if scope not in self.scopes:
                 raise ScopeError()
+            q['scope'] = scope
 
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
             else:
-                resp.append(rec['pubkey'])
+                kscope = rec['scope']
+                allowed_hosts = None
+                if 'allowed_hosts' in self.scopes[kscope]:
+                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
+                pubkey = rec['pubkey']
+                if allowed_hosts is not None:
+                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
+                    pubkey = '%s %s' % (allowstring, pubkey)
+                resp.append(pubkey)
         return resp
 
     def expire(self, id):
