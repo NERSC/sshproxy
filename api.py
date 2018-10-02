@@ -30,7 +30,6 @@ import json
 import sys
 
 app = Flask(__name__)
-app.debug = True
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
 _VERSION = "1.1"
