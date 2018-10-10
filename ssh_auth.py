@@ -36,8 +36,9 @@ class SSHAuth(object):
         if 'mongo_host' in os.environ:
             mongo_host = os.environ['mongo_host']
         if mongo_host.startswith('mongodb://'):
-            (user, passwd, hosts, replset) = self.parse_mongo_url(mongo_host)
-            print '%s %s %s' % (user, hosts, replset)
+            (user, passwd, hosts, replset, authdb) = \
+                self.parse_mongo_url(mongo_host)
+            print '%s %s %s %s' % (user, hosts, replset, authdb)
             mongo = MongoReplicaSetClient(hosts, replicaset=replset)
         else:
             mongo = MongoClient(mongo_host)
@@ -45,7 +46,7 @@ class SSHAuth(object):
             passwd = None
         self.db = mongo['sshauth']
         if user is not None and passwd is not None:
-            self.db.authenticate(user, passwd, source='admin')
+            self.db.authenticate(user, passwd, source=authdb)
         self.registry = self.db['registry']
 
     def reload_config(self):
@@ -71,14 +72,21 @@ class SSHAuth(object):
     # mongodb://$muser:$mpass@$n1,$n2,$n3/?replicaSet=$replset
     def parse_mongo_url(self, url):
         url = url.replace('mongodb://', '')
-        (p1, p2) = url.split('/?')
-        arr = p2.split('=')
-        replset = arr[1]
+        if '/?' in url:
+            (p1, p2) = url.split('/?')
+            arr = p2.split('=')
+            replset = arr[1]
+        else:
+            replset = None
+            p1 = url
 
-        (userpasswd, hoststr) = p1.split('@') 
+        (userpasswd, hoststr) = p1.split('@')
         (user, passwd) = userpasswd.split(':', 1)
+        authdb = 'admin'
+        if '/' in hoststr:
+            (hoststr, authdb) = hoststr.split('/')
         hosts = hoststr.split(',')
-        return (user, passwd, hosts, replset)
+        return (user, passwd, hosts, replset, authdb)
 
     def check_failed_count(self, username):
         """

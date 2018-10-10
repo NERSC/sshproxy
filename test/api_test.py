@@ -102,7 +102,7 @@ class APITestCase(unittest.TestCase):
         self.assertIn('auser', rv.data)
         self.assertIn('ssh-rsa', rv.data)
         rv = self.app.get('/get_keys/bogus/auser')
-        self.assertEquals(rv.status_code, 500)
+        self.assertEquals(rv.status_code, 404)
         rv = self.app.get('/get_keys/scope3/auser')
         self.assertEquals(rv.status_code, 200)
         self.assertEquals('', rv.data)
@@ -122,6 +122,10 @@ class APITestCase(unittest.TestCase):
         # No skey
         rv = self.app.post(url, data='{"a": "b"}', headers=self.headers)
         self.assertEquals(rv.status_code, 403)
+        # Bad Scope
+        url = '/create_pair/bogus/'
+        rv = self.app.post(url, headers=self.headers)
+        self.assertEquals(rv.status_code, 404)
 
     def test_get_keys(self):
         rv = self.app.get('/get_keys/auser')
