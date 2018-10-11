@@ -23,7 +23,7 @@ See LICENSE for full text.
 
 from flask import Flask, request, Response
 import logging
-from ssh_auth import SSHAuth
+from ssh_auth import SSHAuth, ScopeError
 import pam
 import os
 import json
@@ -157,6 +157,9 @@ def create_pair_scope(scope):
     except ValueError as err:
         app.logger.warning('raised ValueError %s' % str(err))
         return str(err), 403
+    except ScopeError as err:
+        app.logger.warning('Bad scope specified %s' % str(err))
+        return str(err), 404
     except:
         return failure('create_pair_scope')
 
@@ -232,6 +235,9 @@ def get_keys_scope(scope, username):
         for k in keys:
             mess += k + '\n'
         return mess
+    except ScopeError as err:
+        app.logger.warning('Bad scope specified %s' % str(err))
+        return str(err), 404
     except:
         return failure('get_keys_scope')
 

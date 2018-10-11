@@ -36,7 +36,11 @@ class SSHAuthTestCase(unittest.TestCase):
         self.test_dir = test_dir
         self.ssh = ssh_auth.SSHAuth(test_dir+'/config.yaml')
         self.user = 'blah'
-        self.registry = MongoClient()['sshauth']['registry']
+        if 'mongo_host' in os.environ:
+            cli = MongoClient(os.environ['mongo_host'])
+        else:
+            cli = MongoClient()
+        self.registry = cli['sshauth']['registry']
         self.registry.remove()
         self.host = os.environ.get('TESTIP', _localhost)
 
