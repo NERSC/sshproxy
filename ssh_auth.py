@@ -156,6 +156,8 @@ class SSHAuth(object):
             return 24*3600*int(ltime[0:-1])
         elif ltime.endswith('w'):
             return 7*24*3600*int(ltime[0:-1])
+        elif ltime.endswith('m'):
+            return 30*24*3600*int(ltime[0:-1])
         elif ltime.endswith('y'):
             return 365*24*3600*int(ltime[0:-1])
         else:
