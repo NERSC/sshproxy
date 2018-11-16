@@ -156,10 +156,12 @@ class SSHAuth(object):
             return 24*3600*int(ltime[0:-1])
         elif ltime.endswith('w'):
             return 7*24*3600*int(ltime[0:-1])
+        elif ltime.endswith('m'):
+            return 30*24*3600*int(ltime[0:-1])
         elif ltime.endswith('y'):
             return 365*24*3600*int(ltime[0:-1])
         else:
-            raise ValueError("Unrecongnized lifetime")
+            raise ValueError("Unrecognized lifetime")
 
     def _sign(self, fn, principle, serial, scopename):
         print "_sign(%s, %s, %s, %s)" % (fn, principle, serial, scopename)
@@ -248,7 +250,7 @@ class SSHAuth(object):
         if scopen is None:
             raise ScopeError("Scope is required.")
         if scopen not in self.scopes:
-            raise ScopeError("Unrecongnized scope")
+            raise ScopeError("Unrecognized scope")
         scope = self.scopes[scopen]
         with open(scope['cacert']+'.pub') as f:
             cacert = f.read()
@@ -258,7 +260,7 @@ class SSHAuth(object):
         if scopen is None:
             raise ScopeError("Scope is required for host signing")
         if scopen not in self.scopes:
-            raise ScopeError("Unrecongnized scope")
+            raise ScopeError("Unrecognized scope")
         scope = self.scopes[scopen]
         if 'type' not in scope or scope['type'] != 'host':
             raise ScopeError("Scope must be a host type for this operaiton")
