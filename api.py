@@ -32,7 +32,7 @@ import sys
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
-_VERSION = "1.0"
+_VERSION = "1.1"
 
 
 class ctx(object):
@@ -167,12 +167,12 @@ def create_pair_scope(scope):
     except OSError as err:
         app.logger.warning('raised OSError %s' % str(err))
         return str(err), 403
-    except ScopeError as err:
-        app.logger.warning('ScopeError: %s' % str(err))
-        return str(err), 401
     except CollabError as err:
         app.logger.warning('CollabError: %s' % str(err))
         return str(err), 403
+    except ScopeError as err:
+        app.logger.warning('Bad scope specified %s' % str(err))
+        return str(err), 404
     except:
         return failure('create_pair_scope')
 
@@ -248,6 +248,9 @@ def get_keys_scope(scope, username):
         for k in keys:
             mess += k + '\n'
         return mess
+    except ScopeError as err:
+        app.logger.warning('Bad scope specified %s' % str(err))
+        return str(err), 404
     except:
         return failure('get_keys_scope')
 

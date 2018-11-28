@@ -10,6 +10,8 @@ scopes:
   scope1:
      skey: scope1-secret
      cacert: ./cacert
+     allowed_hosts:
+       - '127.0.0.1'
      lifetime: 1w
   scope2:
      lifetime: 1d

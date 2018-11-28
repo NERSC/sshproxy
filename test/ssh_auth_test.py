@@ -36,7 +36,11 @@ class SSHAuthTestCase(unittest.TestCase):
         self.test_dir = test_dir
         self.ssh = SSHAuth(test_dir+'/config.yaml')
         self.user = 'blah'
-        self.registry = MongoClient()['sshauth']['registry']
+        if 'mongo_host' in os.environ:
+            cli = MongoClient(os.environ['mongo_host'])
+        else:
+            cli = MongoClient()
+        self.registry = cli['sshauth']['registry']
         self.registry.remove()
         self.host = os.environ.get('TESTIP', _localhost)
 
@@ -108,13 +112,39 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIsNotNone(p2)
         k = self.get_pub(self.user, scope1)
         keys = self.ssh.get_keys(self.user, scope1)
-        self.assertIn(k, keys)
+        found = False
+        for key in keys:
+            if k in key:
+                found = True
+        self.assertTrue(found)
         keys = self.ssh.get_keys(self.user, 'default')
         self.assertNotIn(k, keys)
         p = self.ssh.create_pair(self.user, _localhost, scope2)
         self.assertIsNotNone(p)
         with self.assertRaises(OSError):
             p = self.ssh.create_pair(self.user, _localhost, 'scope4')
+
+    def test_generate_pair(self):
+        ssh = SSHAuth(self.test_dir+'/config.yaml')
+        ssh._run_command = MagicMock(return_value=-1)
+        with self.assertRaises(OSError):
+            ssh._generate_pair('auser')
+
+    def test_sign(self):
+        ssh = SSHAuth(self.test_dir+'/config.yaml')
+        ssh._run_command = MagicMock(return_value=-1)
+        scope = {
+            'scopename': 'scope1',
+            'cacert': 'blah'
+        }
+        with self.assertRaises(OSError):
+            ssh._sign('blah', 'auser', '123', scope)
+        self.assertIsNone(ssh._sign('blah', 'auser', '123', None))
+
+    def test_run_command(self):
+        self.ssh.debug_on = True
+        res = self.ssh._run_command('/asdf')
+        self.assertNotEqual(res, 0)
 
     def test_collab_scope(self):
         """
@@ -160,6 +190,30 @@ class SSHAuthTestCase(unittest.TestCase):
             p = self.ssh._check_allowed('root', None)
         with self.assertRaises(OSError):
             p = self.ssh.create_pair('root', _localhost, None)
+
+    def test_allowed_host(self):
+        scope1 = 'scope1'
+        secret = 'scope1-secret'
+        certkey = 'temp-cert.pub'
+        p = self.ssh.create_pair(self.user, _localhost, scope1, skey=secret)
+        cert = p[1].split('\n')[-1]
+        with open(certkey, 'w') as f:
+            f.write(cert)
+        command = ['ssh-keygen', '-f', certkey, '-L']
+        p = Popen(command, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = p.communicate()
+        found = False
+        for line in stdout.split('\n'):
+            if line.find('source-address 127.0.0.1') > 0:
+                found = True
+        self.assertTrue(found)
+        os.unlink(certkey)
+        keys = self.ssh.get_keys(self.user)
+        found = False
+        for k in keys:
+            if k.startswith('from="127.0.0.1"') > 0:
+                found = True
+        self.assertTrue(found)
 
     def test_expiration_storage(self):
         slop = 1
@@ -235,6 +289,7 @@ class SSHAuthTestCase(unittest.TestCase):
         slop = 2
         DAY = 24*3600
         WEEK = 7*DAY
+        MONTH = 30*DAY
         YEAR = 365*DAY
         e = self.ssh._convert_time(1)
         self.assertGreaterEqual(e, 60)
@@ -251,6 +306,10 @@ class SSHAuthTestCase(unittest.TestCase):
         e = self.ssh._convert_time('1w')
         self.assertGreaterEqual(e, WEEK)
         self.assertLess(e, WEEK + slop)
+        # months
+        e = self.ssh._convert_time('1m')
+        self.assertGreaterEqual(e, MONTH)
+        self.assertLess(e, MONTH+slop)
         # years
         e = self.ssh._convert_time('1y')
         self.assertGreaterEqual(e, YEAR)
@@ -341,6 +400,25 @@ class SSHAuthTestCase(unittest.TestCase):
         with self.assertRaises(ScopeError):
             ssh.create_pair(self.user, _localhost, nscope)
         os.remove(cfile)
+
+    def test_mongo_parse(self):
+        uri = 'mongodb://user:passwd@server1,server2/test'
+        list = self.ssh.parse_mongo_url(uri)
+        self.assertEquals(list[0], 'user')
+        self.assertEquals(list[1], 'passwd')
+        self.assertEquals(list[2], ['server1', 'server2'])
+        self.assertEquals(list[4], 'test')
+        print(list)
+        uri = 'mongodb://user:passwd@server1,server2/?replset=blah'
+        list = self.ssh.parse_mongo_url(uri)
+        self.assertEquals(list[0], 'user')
+        self.assertEquals(list[1], 'passwd')
+        self.assertEquals(list[2], ['server1', 'server2'])
+        self.assertEquals(list[3], 'blah')
+
+        os.environ['mongo_host'] = 'mongodb://:@localhost'
+        ssh = SSHAuth(self.test_dir + '/config.yaml')
+        os.environ.pop('mongo_host')
 
 
 if __name__ == '__main__':

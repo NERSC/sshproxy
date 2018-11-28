@@ -103,7 +103,7 @@ class APITestCase(unittest.TestCase):
         self.assertIn('auser', rv.data)
         self.assertIn('ssh-rsa', rv.data)
         rv = self.app.get('/get_keys/bogus/auser')
-        self.assertEquals(rv.status_code, 500)
+        self.assertEquals(rv.status_code, 404)
         rv = self.app.get('/get_keys/scope3/auser')
         self.assertEquals(rv.status_code, 200)
         self.assertEquals('', rv.data)
@@ -123,6 +123,10 @@ class APITestCase(unittest.TestCase):
         # No skey
         rv = self.app.post(url, data='{"a": "b"}', headers=self.headers)
         self.assertEquals(rv.status_code, 403)
+        # Bad Scope
+        url = '/create_pair/bogus/'
+        rv = self.app.post(url, headers=self.headers)
+        self.assertEquals(rv.status_code, 404)
 
     def test_create_pair_collab(self):
         data = '{"target_user": "tuser"}'
@@ -137,9 +141,9 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post(url, data=data, headers=self.headers)
         self.assertEquals(rv.status_code, 200)
         self.assertIn('auser as tuser', rv.data)
-        # Missing target_user should return a 401
+        # Missing target_user should return a 404
         rv = self.app.post(url, headers=self.headers)
-        self.assertEquals(rv.status_code, 401)
+        self.assertEquals(rv.status_code, 404)
         # User not in group should return a 403
         self.api.ssh_auth._check_collaboration_account = \
             MagicMock(return_value=False)

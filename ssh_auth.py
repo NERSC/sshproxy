@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, MongoReplicaSetClient
 import sys
 import os
 import os.path
@@ -42,6 +42,23 @@ class SSHAuth(object):
         if 'DEBUG' in os.environ:
             self.debug_on = True
 
+        mongo_host = 'localhost'
+        if 'mongo_host' in os.environ:
+            mongo_host = os.environ['mongo_host']
+        if mongo_host.startswith('mongodb://'):
+            (user, passwd, hosts, replset, authdb) = \
+                self.parse_mongo_url(mongo_host)
+            print '%s %s %s %s' % (user, hosts, replset, authdb)
+            mongo = MongoReplicaSetClient(hosts, replicaset=replset)
+        else:
+            mongo = MongoClient(mongo_host)
+            user = None
+            passwd = None
+        self.db = mongo['sshauth']
+        if user is not None and passwd is not None and user is not '':
+            self.db.authenticate(user, passwd, source=authdb)
+        self.registry = self.db['registry']
+
     def debug(self, line):  # pragma: no cover
         if self.debug_on:
             print(line)
@@ -62,17 +79,29 @@ class SSHAuth(object):
             scope['scopename'] = scopen
             if 'lifetime' in scope:
                 scope['lifetime_secs'] = self._convert_time(scope['lifetime'])
-
-        mongo_host = 'localhost'
-        if 'mongo_host' in os.environ:
-            mongo_host = os.environ['mongo_host']
-        mongo = MongoClient(mongo_host)
-        self.db = mongo['sshauth']
-        self.registry = self.db['registry']
         self.failed_count = {}
         self.MAX_FAILED = gconfig.get('max_failed_logins', 5)
         self.MAX_FAILED_WINDOW = gconfig.get('max_failed_window', 60 * 5)
         self.lastconfig = mtime
+
+    # mongodb://$muser:$mpass@$n1,$n2,$n3/?replicaSet=$replset
+    def parse_mongo_url(self, url):
+        url = url.replace('mongodb://', '')
+        if '/?' in url:
+            (p1, p2) = url.split('/?')
+            arr = p2.split('=')
+            replset = arr[1]
+        else:
+            replset = None
+            p1 = url
+
+        (userpasswd, hoststr) = p1.split('@')
+        (user, passwd) = userpasswd.split(':', 1)
+        authdb = 'admin'
+        if '/' in hoststr:
+            (hoststr, authdb) = hoststr.split('/')
+        hosts = hoststr.split(',')
+        return (user, passwd, hosts, replset, authdb)
 
     def check_failed_count(self, username):
         """
@@ -158,16 +187,18 @@ class SSHAuth(object):
             return 24*3600*int(ltime[0:-1])
         elif ltime.endswith('w'):
             return 7*24*3600*int(ltime[0:-1])
+        elif ltime.endswith('m'):
+            return 30*24*3600*int(ltime[0:-1])
         elif ltime.endswith('y'):
             return 365*24*3600*int(ltime[0:-1])
         else:
-            raise ValueError("Unrecongnized lifetime")
+            raise ValueError("Unrecognized lifetime")
 
     def _sign(self, fn, principle, serial, scope):
-        sn = scope['scopename']
-        self.debug("_sign(%s,%s,%s,%s)" % (fn, principle, serial, sn))
         if scope is None:
             return None
+        sn = scope['scopename']
+        self.debug("_sign(%s,%s,%s,%s)" % (fn, principle, serial, sn))
         if 'cacert' not in scope:
             return None
         command = ['ssh-keygen', '-s', scope['cacert'], '-z', serial]
@@ -177,6 +208,10 @@ class SSHAuth(object):
         else:
             pname = 'user_%s' % (principle)
         command.extend(['-I', pname, '-n', principle])
+        if scope is not None and 'allowed_hosts' in scope:
+            allowed_hosts = scope['allowed_hosts']
+            command.extend(['-O', 'source-address=' +
+                            ','.join(allowed_hosts)])
 
         if 'lifetime_secs' in scope:
             command.append('-V')
@@ -249,7 +284,7 @@ class SSHAuth(object):
         if scopename is None:
             raise ScopeError("Scope is required.")
         if scopename not in self.scopes:
-            raise ScopeError("Unrecongnized scope")
+            raise ScopeError("Unrecognized scope")
         return self.scopes[scopename]
 
     def get_ca_pubkey(self, scopen):
@@ -302,7 +337,7 @@ class SSHAuth(object):
                 raise ScopeError("Missing required target_user")
             if not self._check_collaboration_account(target_user, user):
                 raise CollabError("User %s not a member of %s" %
-                              (user, target_user))
+                                  (user, target_user))
         else:
             target_user = None
 
@@ -344,18 +379,31 @@ class SSHAuth(object):
                 # would mean it is a collab key
                 continue
             else:
-                resp.append(rec['pubkey'])
+                kscope = rec['scope']
+                allowed_hosts = None
+                if 'allowed_hosts' in self.scopes[kscope]:
+                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
+                pubkey = rec['pubkey']
+                if allowed_hosts is not None:
+                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
+                    pubkey = '%s %s' % (allowstring, pubkey)
+                resp.append(pubkey)
 
         q = {'target_user': user, 'enabled': True}
-        if scope is not None:
-            q['scope'] = scopename
 
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
             else:
-                resp.append(rec['pubkey'])
-
+                kscope = rec['scope']
+                allowed_hosts = None
+                if 'allowed_hosts' in self.scopes[kscope]:
+                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
+                pubkey = rec['pubkey']
+                if allowed_hosts is not None:
+                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
+                    pubkey = '%s %s' % (allowstring, pubkey)
+                resp.append(pubkey)
         return resp
 
     def expire(self, id):
