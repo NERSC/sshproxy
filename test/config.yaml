@@ -25,4 +25,8 @@ scopes:
      lifetime: 1d
      allowed_users:
        - auser
+  scope5:
+     lifetime: 1y
+     collaboration: True
+     cacert: ./cacert
 ...

@@ -23,7 +23,7 @@ See LICENSE for full text.
 
 from flask import Flask, request, Response
 import logging
-from ssh_auth import SSHAuth, ScopeError
+from ssh_auth import SSHAuth, ScopeError, CollabError
 import pam
 import os
 import json
@@ -66,6 +66,17 @@ def get_skey(request):
         data = json.loads(rqd)
         if 'skey' in data:
             return data['skey']
+    except:
+        return None
+    return None
+
+
+def get_target_user(request):
+    try:
+        rqd = request.get_data()
+        data = json.loads(rqd)
+        if 'target_user' in data:
+            return data['target_user']
     except:
         return None
     return None
@@ -145,8 +156,10 @@ def create_pair_scope(scope):
         ctx = doauth()
         user = ctx.username
         skey = get_skey(request)
+        target_user = get_target_user(request)
         raddr = request.remote_addr
-        resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey)
+        resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey,
+                                          target_user=target_user)
         app.logger.info('created %s' % (user))
         return resp + cert
     except AuthError as err:
@@ -154,8 +167,8 @@ def create_pair_scope(scope):
     except OSError as err:
         app.logger.warning('raised OSError %s' % str(err))
         return str(err), 403
-    except ValueError as err:
-        app.logger.warning('raised ValueError %s' % str(err))
+    except CollabError as err:
+        app.logger.warning('CollabError: %s' % str(err))
         return str(err), 403
     except ScopeError as err:
         app.logger.warning('Bad scope specified %s' % str(err))

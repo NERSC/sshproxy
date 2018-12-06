@@ -7,9 +7,15 @@ from subprocess import call, Popen, PIPE
 from time import time
 import yaml
 import tempfile
+import grp
 
 
 class ScopeError(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
+
+class CollabError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
@@ -31,6 +37,10 @@ class SSHAuth(object):
         self.configfile = configfile
         self.lastconfig = None
         self.reload_config()
+        self.default_scope = 'default'
+        self.debug_on = False
+        if 'DEBUG' in os.environ:
+            self.debug_on = True
 
         mongo_host = 'localhost'
         if 'mongo_host' in os.environ:
@@ -45,9 +55,13 @@ class SSHAuth(object):
             user = None
             passwd = None
         self.db = mongo['sshauth']
-        if user is not None and passwd is not None:
+        if user is not None and passwd is not None and user is not '':
             self.db.authenticate(user, passwd, source=authdb)
         self.registry = self.db['registry']
+
+    def debug(self, line):  # pragma: no cover
+        if self.debug_on:
+            print(line)
 
     def reload_config(self):
         sd = os.stat(self.configfile)
@@ -62,6 +76,7 @@ class SSHAuth(object):
         self.scopes = self.config['scopes']
         for scopen in self.scopes:
             scope = self.scopes[scopen]
+            scope['scopename'] = scopen
             if 'lifetime' in scope:
                 scope['lifetime_secs'] = self._convert_time(scope['lifetime'])
         self.failed_count = {}
@@ -115,20 +130,20 @@ class SSHAuth(object):
             del self.failed_count[username]
 
     def _run_command(self, command):
-        print '_run_command(): %s' % command
+        out = None
+        if not self.debug_on:
+            out = open("/dev/null", "wb")
+        self.debug('_run_command(): %s' % command)
         try:
-            errno = call(command)
+            errno = call(command, stdout=out, stderr=out)
         except Exception as err:
             print err
             return -1
         return errno
 
-    def _check_scope(self, rscope, user, raddr, skey):
-        if rscope is None:
-            return True
-        if rscope not in self.scopes:
-            raise ScopeError("Invalid or missing Scope.")
-        scope = self.scopes[rscope]
+    def _check_scope(self, scope, user, raddr, skey):
+        if scope is None:
+            raise ScopeError("No scope defined")
         if 'skey' in scope and skey != scope['skey']:
             raise OSError("skey doesn't match")
         if 'allowed_create_addrs' in scope and \
@@ -140,11 +155,27 @@ class SSHAuth(object):
         return True
 
     def _check_allowed(self, user, scope):
-        print "_check_allowed()"
+        """
+        This is to check if the user is unallowed (e.g. root)
+        """
+        self.debug("_check_allowed()")
         if user in self.unallowed_users:
             raise OSError("user %s not allowed" % (user))
         # TODO: Add scope version too
         return True
+
+    def _check_collaboration_account(self, target_user, user):
+        """
+        Check that the user is a member of the collaboration group
+        and is therefore allowed to use the collab acount.
+
+        TODO: Make the group name format a parameter.
+        """
+        try:
+            return user in grp.getgrnam('c_%s' % target_user)
+        except:
+            self.debug("Missing group c_%s" % target_user)
+            return False
 
     def _convert_time(self, ltime):
         # If a number, then it is in minutes
@@ -163,13 +194,11 @@ class SSHAuth(object):
         else:
             raise ValueError("Unrecognized lifetime")
 
-    def _sign(self, fn, principle, serial, scopename):
-        print "_sign(%s, %s, %s, %s)" % (fn, principle, serial, scopename)
-        if scopename is None:
-            return None
-        scope = self.scopes.get(scopename)
+    def _sign(self, fn, principle, serial, scope):
         if scope is None:
             return None
+        sn = scope['scopename']
+        self.debug("_sign(%s,%s,%s,%s)" % (fn, principle, serial, sn))
         if 'cacert' not in scope:
             return None
         command = ['ssh-keygen', '-s', scope['cacert'], '-z', serial]
@@ -203,31 +232,36 @@ class SSHAuth(object):
         f.close()
         return f.name
 
-    def _generate_pair(self, user, serial=None, scope=None):
-        print "_generate_pair(%s, %s, %s)" % (user, serial, scope)
+    def _generate_pair(self, user, serial=None, scope=None, target_user=None):
+        self.debug("_generate_pair(%s, %s, %s)" % (user, serial, scope))
         privfile = self.tmp_filename()
         pubfile = privfile + '.pub'
-        print "privfile=%s pubfile=%s" % (privfile, pubfile)
+        self.debug("privfile=%s pubfile=%s" % (privfile, pubfile))
         if os.path.isfile(pubfile):
             raise OSError("file %s already exists" % pubfile)
         comment = user
+        if target_user is not None:
+            comment += ' as %s' % (target_user)
         if serial is not None:
             comment += ' serial:%s' % (serial)
         command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
                    '-C', comment]
-        print "command: %s" % command
+        self.debug("command: %s" % command)
         cert = None
         if self._run_command(command) != 0:
             print "raise OS error"
             raise OSError('Key generation failed')
-        print "ran command"
+        self.debug("ran command")
         with open(pubfile, 'r') as f:
-            print "opening %s" % pubfile
+            self.debug("opening %s" % pubfile)
             pub = f.read().rstrip()
         with open(privfile, 'r') as f:
-            print "opening %s" % privfile
+            self.debug("opening %s" % privfile)
             priv = f.read()
-        cert = self._sign(privfile, user, serial, scope)
+        if target_user is None:
+            cert = self._sign(privfile, user, serial, scope)
+        else:
+            cert = self._sign(privfile, target_user, serial, scope)
 
         os.remove(privfile)
         os.remove(pubfile)
@@ -246,22 +280,21 @@ class SSHAuth(object):
     def _get_serial(self):
         return str(time()).replace('.', '')
 
-    def get_ca_pubkey(self, scopen):
-        if scopen is None:
+    def _get_scope(self, scopename):
+        if scopename is None:
             raise ScopeError("Scope is required.")
-        if scopen not in self.scopes:
+        if scopename not in self.scopes:
             raise ScopeError("Unrecognized scope")
-        scope = self.scopes[scopen]
+        return self.scopes[scopename]
+
+    def get_ca_pubkey(self, scopen):
+        scope = self._get_scope(scopen)
         with open(scope['cacert']+'.pub') as f:
             cacert = f.read()
         return cacert
 
     def sign_host(self, raddr, scopen):
-        if scopen is None:
-            raise ScopeError("Scope is required for host signing")
-        if scopen not in self.scopes:
-            raise ScopeError("Unrecognized scope")
-        scope = self.scopes[scopen]
+        scope = self._get_scope(scopen)
         if 'type' not in scope or scope['type'] != 'host':
             raise ScopeError("Scope must be a host type for this operaiton")
         lifetime = scope['lifetime_secs']
@@ -271,7 +304,7 @@ class SSHAuth(object):
         with open(fn+'.pub', 'w') as f:
             f.write(pub)
         serial = self._get_serial()
-        cert = self._sign(fn, hostname, serial, scopen)
+        cert = self._sign(fn, hostname, serial, scope)
         os.remove(fn+'.pub')
         rec = {'ip': raddr,
                'principle': hostname,
@@ -286,41 +319,77 @@ class SSHAuth(object):
         self.registry.insert(rec)
         return cert
 
-    def create_pair(self, user, raddr, scope, skey=None, lifetime=LIFETIME):
-        print "create_pair()"
+    def create_pair(self, user, raddr, scopename, skey=None,
+                    target_user=None, lifetime=LIFETIME):
+        self.debug("create_pair()")
         self.reload_config()
-        if scope is not None:
-            print "scope is %s" % scope
-            self._check_scope(scope, user, raddr, skey)
-            if 'lifetime_secs' in self.scopes[scope]:
-                lifetime = self.scopes[scope]['lifetime_secs']
-        self._check_allowed(user, scope)
+        if scopename is not None:
+            self.debug("scope is %s" % scopename)
+        else:
+            scopename = self.default_scope
+        scope = self._get_scope(scopename)
+        self._check_scope(scope, user, raddr, skey)
+        if 'lifetime_secs' in scope:
+            lifetime = scope['lifetime_secs']
+        if 'collaboration' in scope and scope['collaboration']:
+            self.debug("Using collab")
+            if target_user is None:
+                raise ScopeError("Missing required target_user")
+            if not self._check_collaboration_account(target_user, user):
+                raise CollabError("User %s not a member of %s" %
+                                  (user, target_user))
+        else:
+            target_user = None
+
+        self._check_allowed(user, scopename)
         serial = self._get_serial()
-        print "serial is %s" % serial
-        pub, priv, cert = self._generate_pair(user, serial=serial, scope=scope)
-        print "past _generate_pair()"
-        if scope is None:
-            scope = 'default'
+        self.debug("serial is %s" % serial)
+        pub, priv, cert = self._generate_pair(user, serial=serial,
+                                              scope=scope,
+                                              target_user=target_user)
+        self.debug("past _generate_pair()")
         rec = {'principle': user,
                'pubkey': pub,
                'type': 'user',
                'enabled': True,
-               'scope': scope,
+               'scope': scope['scopename'],
                'serial': serial,
                'created': time(),
                'expires': time() + lifetime
                }
+        if target_user is not None:
+            rec['target_user'] = target_user
         self.registry.insert(rec)
         return priv, cert
 
-    def get_keys(self, user, scope=None):
+    def get_keys(self, user, scopename=None):
         resp = []
         now = time()
         q = {'principle': user, 'enabled': True}
-        if scope is not None:
-            if scope not in self.scopes:
-                raise ScopeError()
-            q['scope'] = scope
+        scope = None
+        if scopename is not None:
+            scope = self._get_scope(scopename)
+            q['scope'] = scopename
+
+        for rec in self.registry.find(q):
+            if now > rec['expires']:
+                self.expire(rec['_id'])
+            elif 'target_user' in rec:
+                # Skip target_user records since this
+                # would mean it is a collab key
+                continue
+            else:
+                kscope = rec['scope']
+                allowed_hosts = None
+                if 'allowed_hosts' in self.scopes[kscope]:
+                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
+                pubkey = rec['pubkey']
+                if allowed_hosts is not None:
+                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
+                    pubkey = '%s %s' % (allowstring, pubkey)
+                resp.append(pubkey)
+
+        q = {'target_user': user, 'enabled': True}
 
         for rec in self.registry.find(q):
             if now > rec['expires']:
