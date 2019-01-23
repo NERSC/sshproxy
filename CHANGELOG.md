@@ -1,5 +1,11 @@
 # Change Log
 
+## Version 1.3
+- Add Windows/Putty Support
+
+## Version 1.2
+- No record since versions weren't properly tagged
+
 ## Version 1.1 (2018-09-12)
 
 - Add allowed_hosts support

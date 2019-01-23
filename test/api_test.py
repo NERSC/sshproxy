@@ -23,14 +23,41 @@ from base64 import b64encode
 from mock import MagicMock
 
 
+def _my_run(com):
+    if com[0] == 'ssh-keygen' and com[1] == '-q':
+        fname = com[3]
+        with open(fname, "w") as f:
+            f.write('bogus')
+        with open(fname+'.pub', "w") as f:
+            f.write('bogus')
+    if com[0] == 'ssh-keygen' and com[1] == '-s':
+        fname = com[-1].replace('.pub', '-cert.pub')
+        with open(fname, "w") as f:
+            f.write('bogus')
+        with open(fname+'.pub', "w") as f:
+            f.write('bogus')
+    elif com[0] == 'puttygen':
+        fname = com[3]
+        with open(fname, "w") as f:
+            f.write('ppk')
+    return 0
+
+
+def _my_auth(user, password, service=''):
+    if password == 'bad':
+        return False
+    else:
+        return True
+
+
 class APITestCase(unittest.TestCase):
 
     def setUp(self):
-        os.environ['FAKEAUTH'] = '1'
         test_dir = os.path.dirname(os.path.abspath(__file__)) + "/../test/"
         self.test_dir = test_dir
         import api
         self.api = api
+        self.api.authenticate = MagicMock(side_effect=_my_auth)
         self.app = api.app.test_client()
         self.headers = self.make_header('auser:password')
         self.badheaders = self.make_header('auser:bad')
@@ -63,9 +90,10 @@ class APITestCase(unittest.TestCase):
     def test_create_pair(self):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
+
         rv = self.app.post('/create_pair', headers=self.badheaders)
         self.assertEquals(rv.status_code, 401)
-        print rv.data
+
         rv = self.app.post('/create_pair', headers=self.badmethod)
         self.assertEquals(rv.status_code, 401)
         # Missing auth
@@ -78,20 +106,49 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post('/create_pair', headers=self.legbad)
         self.assertEquals(rv.status_code, 401)
 
+        # Raise an unexpected error
+        old = self.api.ssh_auth.create_pair
+        self.api.ssh_auth.create_pair = MagicMock(side_effect=KeyError())
+        rv = self.app.post('/create_pair', headers=self.headers)
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.create_pair = old
+
+    def test_create_pair_putty(self):
+        old = self.api.ssh_auth._run_command
+        self.api.ssh_auth._run_command = MagicMock(side_effect=_my_run)
+        rv = self.app.post('/create_pair?putty', headers=self.headers)
+        self.assertEquals(rv.status_code, 200)
+        self.assertTrue(rv.data.startswith('ppk'))
+
+        data = '{"skey": "scope1-secret"}'
+        url = '/create_pair/scope1/?putty'
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 200)
+        self.assertTrue(rv.data.startswith('ppk'))
+        self.api.ssh_auth._run_command = old
+
     def test_get_ca_pubkey(self):
         rv = self.app.get('/get_ca_pubkey/scope3/')
         self.assertEquals(rv.status_code, 200)
         self.assertIsNotNone(rv.data)
 
+        # Raise an unexpected error
+        old = self.api.ssh_auth.get_ca_pubkey
+        self.api.ssh_auth.get_ca_pubkey = MagicMock(side_effect=KeyError())
+        rv = self.app.get('/get_ca_pubkey/scope3/')
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.get_ca_pubkey = old
+
     def test_sign_host(self):
         rv = self.app.post('/sign_host/scope3/')
         self.assertEquals(rv.status_code, 200)
 
-    def test_pam(self):
-        del os.environ['FAKEAUTH']
-        rv = self.app.post('/create_pair', headers=self.headers)
-        self.assertEquals(rv.status_code, 401)
-        os.environ['FAKEAUTH'] = '1'
+        # Raise an unexpected error
+        old = self.api.ssh_auth.sign_host
+        self.api.ssh_auth.sign_host = MagicMock(side_effect=KeyError())
+        rv = self.app.post('/sign_host/scope3/')
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.sign_host = old
 
     def test_get_keys_scope(self):
         data = '{"skey": "scope1-secret"}'
@@ -108,6 +165,13 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 200)
         self.assertEquals('', rv.data)
 
+        # Raise an unexpected error
+        old = self.api.ssh_auth.get_keys
+        self.api.ssh_auth.get_keys = MagicMock(side_effect=KeyError())
+        rv = self.app.get('/get_keys/scope1/auser')
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.get_keys = old
+
     def test_create_pair_scope(self):
         data = '{"skey": "scope1-secret"}'
         url = '/create_pair/scope1/'
@@ -117,6 +181,7 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 401)
         rv = self.app.post(url, data=data, headers=self.badmethod)
         self.assertEquals(rv.status_code, 401)
+
         # No data
         rv = self.app.post(url, headers=self.headers)
         self.assertEquals(rv.status_code, 403)
@@ -127,6 +192,13 @@ class APITestCase(unittest.TestCase):
         url = '/create_pair/bogus/'
         rv = self.app.post(url, headers=self.headers)
         self.assertEquals(rv.status_code, 404)
+
+        # Raise an unexpected error
+        old = self.api.ssh_auth.create_pair
+        self.api.ssh_auth.create_pair = MagicMock(side_effect=KeyError())
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.create_pair = old
 
     def test_create_pair_collab(self):
         data = '{"target_user": "tuser"}'
@@ -158,6 +230,13 @@ class APITestCase(unittest.TestCase):
         rv = self.app.get('/get_keys/buser')
         self.assertEquals(rv.status_code, 200)
 
+        # Raise an unexpected error
+        old = self.api.ssh_auth.get_keys
+        self.api.ssh_auth.get_keys = MagicMock(side_effect=KeyError())
+        rv = self.app.get('/get_keys/auser')
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.get_keys = old
+
     def test_reset(self):
         rv = self.app.delete('/reset', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
@@ -165,6 +244,13 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 401)
         rv = self.app.delete('/reset', headers=self.badmethod)
         self.assertEquals(rv.status_code, 401)
+
+        # Raise an unexpected error
+        old = self.api.ssh_auth.expireuser
+        self.api.ssh_auth.expireuser = MagicMock(side_effect=KeyError())
+        rv = self.app.delete('/reset', headers=self.headers)
+        self.assertEquals(rv.status_code, 500)
+        self.api.ssh_auth.expireuser = old
 
     def test_failed_count(self):
         """
