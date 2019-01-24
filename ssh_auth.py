@@ -172,7 +172,7 @@ class SSHAuth(object):
         TODO: Make the group name format a parameter.
         """
         try:
-            return user in grp.getgrnam('c_%s' % target_user)
+            return user in grp.getgrnam('c_%s' % target_user).gr_mem
         except:
             self.debug("Missing group c_%s" % target_user)
             return False
