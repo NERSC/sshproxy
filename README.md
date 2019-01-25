@@ -24,6 +24,7 @@ Note: An unencrypted end-point should not be used in production.  In a real-worl
 Method: POST  
 Header: Basic Username:password  
 Data: None
+Options: putty can be specified on the URL to get back a ppk format..
 
 This end-point authenticates the user using the provided username and password and, if successful, generates a SSH key pair.  The private key is returned in the response and not stored.  The pubic key is saved in a database and is associated with the user.  Authentication is determined by the PAM configuration associated with the service (sshauth).
 
@@ -32,6 +33,7 @@ This end-point authenticates the user using the provided username and password a
 Method: POST  
 Header: Basic Username:password  
 Data: JSON encoded dictionary that may contain an 'skey' for the scope.
+Options: putty can be specified on the URL to get back a ppk format..
 
 Create a key pair for the specified scope.  The scope may require a share key
 (skey) which must be provided in the data block which is a JSON encoded dictionary.

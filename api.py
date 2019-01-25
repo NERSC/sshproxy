@@ -24,7 +24,7 @@ See LICENSE for full text.
 from flask import Flask, request, Response
 import logging
 from ssh_auth import SSHAuth, ScopeError, CollabError
-import pam
+from pam import authenticate
 import os
 import json
 import sys
@@ -34,6 +34,14 @@ CONFIG = os.environ.get('CONFIG', 'config.yaml')
 ssh_auth = SSHAuth(CONFIG)
 _VERSION = "1.1"
 
+if 'SERVER_SOFTWARE' in os.environ:
+    # Make flask logging work with gunicorn
+    logname = 'gunicorn.error'
+    gunicorn_error_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers.extend(gunicorn_error_logger.handlers)
+else:
+    logname = 'shifter'
+app.logger.debug('Initializing api')
 
 class ctx(object):
     def __init__(self, type, username):
@@ -118,13 +126,7 @@ def doauth():
 
     if ssh_auth.check_failed_count(username):
         raise AuthError('Too many failed logins %s' % (username))
-    if os.environ.get('FAKEAUTH') == "1":
-        app.logger.warning("Fake Auth: %s" % (username))
-        if password == 'bad':
-            ssh_auth.failed_login(username)
-            raise AuthError('Bad fake password')
-        authmode = 'fake'
-    elif not pam.authenticate(username, password, service='sshauth'):
+    if not authenticate(username, password, service='sshauth'):
         ssh_auth.failed_login(username)
         raise AuthError("Failed login: %s" % (username))
     ssh_auth.reset_failed_count(username)
@@ -158,8 +160,12 @@ def create_pair_scope(scope):
         skey = get_skey(request)
         target_user = get_target_user(request)
         raddr = request.remote_addr
+        putty = False
+        if 'putty' in request.args:
+            putty = True
         resp, cert = ssh_auth.create_pair(user, raddr, scope, skey=skey,
-                                          target_user=target_user)
+                                          target_user=target_user,
+                                          putty=putty)
         app.logger.info('created %s' % (user))
         return resp + cert
     except AuthError as err:
@@ -184,11 +190,18 @@ def create_pair():
     """
     try:
         ctx = doauth()
+        putty = False
+        if 'putty' in request.args:
+            putty = True
         raddr = request.access_route[-1]
         app.logger.info('raddr is %s' % raddr)
-        resp = ssh_auth.create_pair(ctx.username, raddr, None)
+        resp, cert = ssh_auth.create_pair(ctx.username, raddr, None,
+                                          putty=putty)
         app.logger.info('created %s' % (ctx.username))
-        return resp
+        if cert is None:
+            return resp
+        else:
+            return resp + cert
     except AuthError as err:
         return auth_failure(str(err))
     except:

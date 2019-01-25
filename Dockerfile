@@ -2,7 +2,7 @@ FROM python:2.7
 
 ENV DEBIAN_FRONTEND=noninteractive
 ADD requirements.txt /tmp/requirements.txt
-RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim && pip install -r /tmp/requirements.txt
+RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim putty-tools && pip install -r /tmp/requirements.txt
 
 # LDAP
 ADD ldap /tmp/ldap

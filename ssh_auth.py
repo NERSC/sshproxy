@@ -232,7 +232,8 @@ class SSHAuth(object):
         f.close()
         return f.name
 
-    def _generate_pair(self, user, serial=None, scope=None, target_user=None):
+    def _generate_pair(self, user, serial=None, scope=None, target_user=None,
+                       putty=False):
         self.debug("_generate_pair(%s, %s, %s)" % (user, serial, scope))
         privfile = self.tmp_filename()
         pubfile = privfile + '.pub'
@@ -249,7 +250,7 @@ class SSHAuth(object):
         self.debug("command: %s" % command)
         cert = None
         if self._run_command(command) != 0:
-            print "raise OS error"
+            self.debug("command failed %s" % (' '.join(command)))
             raise OSError('Key generation failed')
         self.debug("ran command")
         with open(pubfile, 'r') as f:
@@ -262,10 +263,26 @@ class SSHAuth(object):
             cert = self._sign(privfile, user, serial, scope)
         else:
             cert = self._sign(privfile, target_user, serial, scope)
+        ppk = None
+        if putty:
+            ppkfile = self.tmp_filename()
+            command = ['puttygen', privfile, '-o', ppkfile]
+            if self._run_command(command) != 0:
+                raise OSError('Putty failed')
+            with open(ppkfile) as f:
+                ppk = f.read()
+            os.remove(ppkfile)
 
         os.remove(privfile)
         os.remove(pubfile)
-        return pub, priv, cert
+        pair = {
+            'public': pub,
+            'private': priv,
+            'cert': cert,
+            'ppk': ppk
+        }
+        # return pub, priv, cert, ppk
+        return pair
 
     def _get_host_key(self, raddr, type='rsa'):
         command = ['ssh-keyscan', '-t', type, '-T', '5', raddr]
@@ -320,7 +337,8 @@ class SSHAuth(object):
         return cert
 
     def create_pair(self, user, raddr, scopename, skey=None,
-                    target_user=None, lifetime=LIFETIME):
+                    target_user=None, lifetime=LIFETIME,
+                    putty=False):
         self.debug("create_pair()")
         self.reload_config()
         if scopename is not None:
@@ -344,12 +362,13 @@ class SSHAuth(object):
         self._check_allowed(user, scopename)
         serial = self._get_serial()
         self.debug("serial is %s" % serial)
-        pub, priv, cert = self._generate_pair(user, serial=serial,
-                                              scope=scope,
-                                              target_user=target_user)
+        pair = self._generate_pair(user, serial=serial,
+                                   scope=scope,
+                                   putty=putty,
+                                   target_user=target_user)
         self.debug("past _generate_pair()")
         rec = {'principle': user,
-               'pubkey': pub,
+               'pubkey': pair['public'],
                'type': 'user',
                'enabled': True,
                'scope': scope['scopename'],
@@ -360,15 +379,17 @@ class SSHAuth(object):
         if target_user is not None:
             rec['target_user'] = target_user
         self.registry.insert(rec)
-        return priv, cert
+        if putty:
+            return pair['ppk'], ''
+        else:
+            return pair['private'], pair['cert']
 
     def get_keys(self, user, scopename=None):
         resp = []
         now = time()
         q = {'principle': user, 'enabled': True}
-        scope = None
         if scopename is not None:
-            scope = self._get_scope(scopename)
+            self._get_scope(scopename)
             q['scope'] = scopename
 
         for rec in self.registry.find(q):

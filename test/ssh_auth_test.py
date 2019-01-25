@@ -29,6 +29,20 @@ from mock import MagicMock
 _localhost = '127.0.0.1'
 
 
+def _my_run(com):
+    if com[0] == 'ssh-keygen':
+        fname = com[3]
+        with open(fname, "w") as f:
+            f.write('bogus')
+        with open(fname+'.pub', "w") as f:
+            f.write('bogus')
+    elif com[0] == 'puttygen':
+        fname = com[3]
+        with open(fname, "w") as f:
+            f.write('bogus')
+    return 0
+
+
 class SSHAuthTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -130,9 +144,13 @@ class SSHAuthTestCase(unittest.TestCase):
         with self.assertRaises(OSError):
             ssh._generate_pair('auser')
 
+    def test_putty(self):
+        ssh = SSHAuth(self.test_dir+'/config.yaml')
+        ssh._run_command = MagicMock(side_effect=_my_run)
+        ssh._generate_pair('auser', putty=True)
+
     def test_sign(self):
         ssh = SSHAuth(self.test_dir+'/config.yaml')
-        ssh._run_command = MagicMock(return_value=-1)
         scope = {
             'scopename': 'scope1',
             'cacert': 'blah'
