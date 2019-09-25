@@ -2,21 +2,19 @@
 
 
 """
-SSH Auth API, Copyright (c) 2017, The Regents of the University of California,
-through Lawrence Berkeley National Laboratory (subject to receipt of any
-required approvals from the U.S. Dept. of Energy).  All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
- 1. Redistributions of source code must retain the above copyright notice,
-    this list of conditions and the following disclaimer.
- 2. Redistributions in binary form must reproduce the above copyright notice,
-    this list of conditions and the following disclaimer in the documentation
-    and/or other materials provided with the distribution.
- 3. Neither the name of the University of California, Lawrence Berkeley
-    National Laboratory, U.S. Dept. of Energy nor the names of its
-    contributors may be used to endorse or promote products derived from this
-    software without specific prior written permission.`
+SSH Proxy (sshproxy), Copyright (c) 2019, The Regents of the University of California, 
+through Lawrence Berkeley National Laboratory (subject to receipt of any required 
+approvals from the U.S. Dept. of Energy).  All rights reserved.
+ 
+If you have questions about your rights to use or distribute this software, 
+please contact Berkeley Lab's Intellectual Property Office at  IPO@lbl.gov.
+ 
+NOTICE.  This Software was developed under funding from the U.S. Department of Energy 
+and the U.S. Government consequently retains certain rights. As such, the U.S. 
+Government has been granted for itself and others acting on its behalf a paid-up, 
+nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute 
+copies to the public, prepare derivative works, and perform publicly and display 
+publicly, and to permit other to do so. 
 
 See LICENSE for full text.
 """
@@ -28,11 +26,18 @@ from pam import authenticate
 import os
 import json
 import sys
+from jwt import decode, PyJWTError
 
 app = Flask(__name__)
 CONFIG = os.environ.get('CONFIG', 'config.yaml')
+JWT_PUB = os.environ.get("JWT_PUB")
 ssh_auth = SSHAuth(CONFIG)
+jwt_pub = None
 _VERSION = "1.1"
+
+if JWT_PUB is not None and os.path.exists(JWT_PUB):
+    with open(JWT_PUB) as f:
+        jwt_pub = f.read()
 
 if 'SERVER_SOFTWARE' in os.environ:
     # Make flask logging work with gunicorn
@@ -40,7 +45,7 @@ if 'SERVER_SOFTWARE' in os.environ:
     gunicorn_error_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers.extend(gunicorn_error_logger.handlers)
 else:
-    logname = 'shifter'
+    logname = 'sshproxy'
 app.logger.debug('Initializing api')
 
 class ctx(object):
@@ -104,6 +109,19 @@ def legacyauth():
     (username, password) = astr.split(':')
     return (username, password)
 
+def jwt_auth(tok):
+    if jwt_pub is None:
+        raise AuthError("JWT not configured")
+    try:
+        pack = decode(tok[7:], key=jwt_pub, verify=True, algorithms='RS256')
+    except PyJWTError:
+        print("Failed to verify JWT")
+        raise AuthError("JWT verify failed")
+
+    if 'user' not in pack:
+        raise AuthError("User not encoded in JWT")
+    
+    return pack['user']
 
 def doauth():
     """
@@ -117,12 +135,21 @@ def doauth():
         username = auth.username
         password = auth.password
         authmode = 'basic'
+    elif "Authorization" in request.headers:
+        tok = request.headers['Authorization']
+        if tok.startswith('Bearer '):
+            username = jwt_auth(tok)
+            return ctx('jwt', username)
+        else:
+            raise AuthError("Unknown auth method")
     else:
+        raise AuthError("Authentication required")
+
         # This should eventually get dropped
-        (username, password) = legacyauth()
-        if username is None or password is None:
-            raise AuthError("Username and password required")
-        authmode = 'legacy'
+        # (username, password) = legacyauth()
+        # if username is None or password is None:
+        #     raise AuthError("Username and password required")
+        # authmode = 'legacy'
 
     if ssh_auth.check_failed_count(username):
         raise AuthError('Too many failed logins %s' % (username))
