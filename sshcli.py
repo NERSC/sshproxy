@@ -49,7 +49,7 @@ def write_output(data, output):
             f.write(line+'\n')
 
     if cert is not None:
-        print "Writing cert"
+        print("Writing cert")
         with open(output+'-cert.pub', 'w') as f:
             f.write(cert+'\n')
 
@@ -76,11 +76,11 @@ def main():
             pstr = b64encode('%s:%s' % (user, pwd))
         h = {'Authorization': 'Basic %s' % (pstr)}
         if args.debug:
-            print url, h
+            print(url, h)
         resp = requests.post(url, headers=h, data=data)
         if resp.status_code != 200:
             retry += 1
-            print resp.text
+            print(resp.text)
         else:
             break
 
@@ -91,7 +91,7 @@ def main():
         write_output(resp.text, output)
     except:
         error('Error saving output.')
-    print "Success.  Key saved in %s" % (output)
+    print("Success.  Key saved in %s" % (output))
 
 
 if __name__ == '__main__':

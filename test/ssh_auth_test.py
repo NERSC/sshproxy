@@ -71,7 +71,7 @@ class SSHAuthTestCase(unittest.TestCase):
     def read_cert(self, cert):
         p = Popen(['ssh-keygen', '-f', '-', '-L'], stdout=PIPE, stdin=PIPE,
                   stderr=None)
-        out = p.communicate(input=cert)[0]
+        out = p.communicate(input=cert.encode())[0]
         return out
 
     def get_prin(self, certtext):
@@ -179,7 +179,7 @@ class SSHAuthTestCase(unittest.TestCase):
         p, c = self.ssh.create_pair(self.user, _localhost, scope5,
                                     target_user=tuser)
         cout = self.read_cert(c)
-        principal = self.get_prin(cout)
+        principal = self.get_prin(cout.decode('utf-8'))
         self.assertEquals(principal, tuser)
         self.assertIsNotNone(p)
         r = self.registry.find_one({'principle': self.user, 'scope': scope5})
@@ -221,7 +221,7 @@ class SSHAuthTestCase(unittest.TestCase):
         p = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         found = False
-        for line in stdout.split('\n'):
+        for line in stdout.decode('utf-8').split('\n'):
             if line.find('source-address 127.0.0.1') > 0:
                 found = True
         self.assertTrue(found)
@@ -426,17 +426,21 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertEquals(list[1], 'passwd')
         self.assertEquals(list[2], ['server1', 'server2'])
         self.assertEquals(list[4], 'test')
-        print(list)
         uri = 'mongodb://user:passwd@server1,server2/?replset=blah'
         list = self.ssh.parse_mongo_url(uri)
         self.assertEquals(list[0], 'user')
         self.assertEquals(list[1], 'passwd')
         self.assertEquals(list[2], ['server1', 'server2'])
         self.assertEquals(list[3], 'blah')
-
+        pmongo_host = None
+        if 'mongo_host' in os.environ:
+            pmongo_host = os.environ['mongo_host'] 
         os.environ['mongo_host'] = 'mongodb://:@localhost'
         ssh = SSHAuth(self.test_dir + '/config.yaml')
-        os.environ.pop('mongo_host')
+        if pmongo_host:
+            os.environ['mongo_host'] = pmongo_host
+        else:
+            os.environ.pop('mongo_host')
 
 
 if __name__ == '__main__':

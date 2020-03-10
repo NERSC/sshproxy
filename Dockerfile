@@ -1,8 +1,7 @@
-FROM python:2.7
+FROM python:3
 
 ENV DEBIAN_FRONTEND=noninteractive
-ADD requirements.txt /tmp/requirements.txt
-RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim putty-tools && pip install -r /tmp/requirements.txt
+RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim putty-tools
 
 # LDAP
 ADD ldap /tmp/ldap
@@ -26,6 +25,9 @@ RUN \
    cd pam_mfa && sed -i 's/-lldap/-lldap -lpam/' Makefile && \
    sed -i 's|putenv|//putenv|' pam_mfa.c && \
    make && cp *.so /lib/x86_64-linux-gnu/security/
+
+ADD requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
 
 ADD . /src/
 RUN cp /src/sshauth.pam /etc/pam.d/sshauth

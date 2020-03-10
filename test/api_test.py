@@ -21,6 +21,7 @@ import unittest
 from time import time
 from base64 import b64encode
 from mock import MagicMock
+from jwt import encode
 
 
 def _my_run(com):
@@ -61,13 +62,20 @@ class APITestCase(unittest.TestCase):
         self.app = api.app.test_client()
         self.headers = self.make_header('auser:password')
         self.badheaders = self.make_header('auser:bad')
-        self.badmethod = {'Authorization': 'Blah ' + b64encode('auser:bad')}
-        self.leggood = {'Authorization': 'Basic auser:good'}
-        self.legbad = {'Authorization': 'Basic auser:bad'}
+        bstr = b64encode(b'auser:bad').decode('utf-8')
+
+        self.badmethod = {'Authorization': 'Blah ' + bstr}
         self.api.ssh_auth.failed_count = {}
+        jwtkf=os.path.join(test_dir, 'jwtRS256.key')
+        with open(jwtkf) as f:
+            self.jwt_key = f.read()
+        jwtkf=os.path.join(test_dir, 'jwtRS256bad.key')
+        with open(jwtkf) as f:
+            self.jwt_bad_key = f.read()
 
     def make_header(self, authstr):
-        return {'Authorization': 'Basic '+b64encode(authstr)}
+        encoded = b64encode(authstr.encode()).decode('utf-8')
+        return {'Authorization': 'Basic %s' % (encoded) }
 
     def get_all(self):
         r = []
@@ -81,7 +89,7 @@ class APITestCase(unittest.TestCase):
 
     def test_status(self):
         rv = self.app.get('/status.html', headers=self.headers)
-        self.assertEquals(rv.data, "OK")
+        self.assertEquals(rv.data, b"OK")
 
     def test_version(self):
         rv = self.app.get('/version', headers=self.headers)
@@ -99,12 +107,6 @@ class APITestCase(unittest.TestCase):
         # Missing auth
         rv = self.app.post('/create_pair')
         self.assertEquals(rv.status_code, 401)
-        # Legacy auth
-        rv = self.app.post('/create_pair', headers=self.leggood)
-        self.assertEquals(rv.status_code, 200)
-        # Legacy bad auth
-        rv = self.app.post('/create_pair', headers=self.legbad)
-        self.assertEquals(rv.status_code, 401)
 
         # Raise an unexpected error
         old = self.api.ssh_auth.create_pair
@@ -113,18 +115,30 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 500)
         self.api.ssh_auth.create_pair = old
 
+
+    def test_jwt(self):
+        jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
+        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        rv = self.app.post('/create_pair', headers=h)
+        self.assertEqual(rv.status_code, 200)
+
+        jwt = encode({'user': 'auser'}, self.jwt_bad_key, algorithm='RS256')
+        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        rv = self.app.post('/create_pair', headers=h)
+        self.assertEqual(rv.status_code, 401)
+
     def test_create_pair_putty(self):
         old = self.api.ssh_auth._run_command
         self.api.ssh_auth._run_command = MagicMock(side_effect=_my_run)
         rv = self.app.post('/create_pair?putty', headers=self.headers)
         self.assertEquals(rv.status_code, 200)
-        self.assertTrue(rv.data.startswith('ppk'))
+        self.assertTrue(rv.data.decode('utf-8').startswith('ppk'))
 
         data = '{"skey": "scope1-secret"}'
         url = '/create_pair/scope1/?putty'
         rv = self.app.post(url, data=data, headers=self.headers)
         self.assertEquals(rv.status_code, 200)
-        self.assertTrue(rv.data.startswith('ppk'))
+        self.assertTrue(rv.data.decode('utf-8').startswith('ppk'))
         self.api.ssh_auth._run_command = old
 
     def test_get_ca_pubkey(self):
@@ -157,13 +171,13 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 200)
         rv = self.app.get('/get_keys/scope1/auser')
         self.assertEquals(rv.status_code, 200)
-        self.assertIn('auser', rv.data)
-        self.assertIn('ssh-rsa', rv.data)
+        self.assertIn(b'auser', rv.data)
+        self.assertIn(b'ssh-rsa', rv.data)
         rv = self.app.get('/get_keys/bogus/auser')
         self.assertEquals(rv.status_code, 404)
         rv = self.app.get('/get_keys/scope3/auser')
         self.assertEquals(rv.status_code, 200)
-        self.assertEquals('', rv.data)
+        self.assertEquals(b'', rv.data)
 
         # Raise an unexpected error
         old = self.api.ssh_auth.get_keys
@@ -212,7 +226,7 @@ class APITestCase(unittest.TestCase):
         # test user
         rv = self.app.post(url, data=data, headers=self.headers)
         self.assertEquals(rv.status_code, 200)
-        self.assertIn('auser as tuser', rv.data)
+        self.assertIn(b'auser as tuser', rv.data)
         # Missing target_user should return a 404
         rv = self.app.post(url, headers=self.headers)
         self.assertEquals(rv.status_code, 404)
