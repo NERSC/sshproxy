@@ -48,7 +48,7 @@ class SSHAuth(object):
         if mongo_host.startswith('mongodb://'):
             (user, passwd, hosts, replset, authdb) = \
                 self.parse_mongo_url(mongo_host)
-            print '%s %s %s %s' % (user, hosts, replset, authdb)
+            print('user=%s host=%s replset=%s authdb=%s' % (user, hosts, replset, authdb))
             mongo = MongoReplicaSetClient(hosts, replicaset=replset)
         else:
             mongo = MongoClient(mongo_host)
@@ -137,7 +137,7 @@ class SSHAuth(object):
         try:
             errno = call(command, stdout=out, stderr=out)
         except Exception as err:
-            print err
+            print(err)
             return -1
         return errno
 
@@ -291,7 +291,7 @@ class SSHAuth(object):
         errno = p.wait()
         if errno != 0 or len(stdout) < 2:
             raise OSError("ssh-keyscan failed")
-        out = ' '.join(stdout.rstrip().split(' ')[1:])
+        out = ' '.join(stdout.decode('utf-8').rstrip().split(' ')[1:])
         return out
 
     def _get_serial(self):
@@ -444,7 +444,7 @@ def main():  # pragma: no cover
         if len(sys.argv) > 3:
             scope = sys.argv[2]
         priv = s.create_pair(user, scope)
-        print priv
+        print(priv)
     elif len(sys.argv) > 2 and sys.argv[1] == 'getkeys':
         user = sys.argv[2]
         scope = None
@@ -452,7 +452,7 @@ def main():  # pragma: no cover
             scope = sys.argv[2]
         keys = s.get_keys(user, scope=scope)
         for k in keys:
-            print k
+            print(k)
     elif len(sys.argv) > 2 and sys.argv[1] == 'expireall':
         user = sys.argv[2]
         s.expireall(user)
