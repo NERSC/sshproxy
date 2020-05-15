@@ -246,7 +246,7 @@ class SSHAuth(object):
         if serial is not None:
             comment += ' serial:%s' % (serial)
         command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
-                   '-C', comment]
+                   '-m', 'PEM', '-C', comment]
         self.debug("command: %s" % command)
         cert = None
         if self._run_command(command) != 0:
