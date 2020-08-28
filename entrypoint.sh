@@ -13,5 +13,7 @@ nslcd &
 
 [ -z $WORKERS ] && export WORKERS=5
 
-/usr/local/bin/gunicorn --workers $WORKERS --timeout 60 -b 0.0.0.0:5000 --log-level INFO api:app
+[ -z $LOG_LEVEL ] && export LOG_LEVEL=INFO
 
+
+/usr/local/bin/gunicorn --workers $WORKERS --timeout 60 -b 0.0.0.0:5000 --log-level $LOG_LEVEL api:app
