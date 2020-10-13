@@ -70,7 +70,7 @@ class SSHAuth(object):
             return
         if self.lastconfig is not None:
             print("Re-loading config")
-        self.config = yaml.load(open(self.configfile))
+        self.config = yaml.load(open(self.configfile), Loader=yaml.FullLoader)
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
         self.scopes = self.config['scopes']

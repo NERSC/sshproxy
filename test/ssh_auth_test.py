@@ -398,7 +398,7 @@ class SSHAuthTestCase(unittest.TestCase):
         """
         fh, cfile = mkstemp()
         nscope = 'newscope'
-        conf = yaml.load(open(self.test_dir+'/config.yaml'))
+        conf = yaml.load(open(self.test_dir+'/config.yaml'), Loader=yaml.FullLoader)
         with open(cfile, "w") as outfile:
             yaml.dump(conf, outfile, default_flow_style=False)
         ssh = SSHAuth(cfile)

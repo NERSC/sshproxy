@@ -23,6 +23,9 @@ from base64 import b64encode
 from mock import MagicMock
 from jwt import encode
 
+def versiontuple(v):
+    return tuple(map(int, (v.split("."))))
+
 
 def _my_run(com):
     if com[0] == 'ssh-keygen' and com[1] == '-q':
@@ -93,7 +96,7 @@ class APITestCase(unittest.TestCase):
 
     def test_version(self):
         rv = self.app.get('/version', headers=self.headers)
-        self.assertGreater(float(rv.data), 0.9)
+        self.assertGreater(versiontuple(rv.data.decode("utf-8")), versiontuple("0.9.0"))
 
     def test_create_pair(self):
         rv = self.app.post('/create_pair', headers=self.headers)
