@@ -7,6 +7,11 @@ if [ ! -z "$LDAP_BASE" ] ; then
 
 fi
 
+if [ ! -z "$OTP_PROXY_URL" ] ; then
+  echo "Replacing OTP Proxy with $OTP_PROXY_URL"
+  sed -i "s|https://otpproxy.nersc.gov|$OTP_PROXY_URL|" /etc/pam.d/sshauth
+fi
+
 nslcd &
 
 /usr/local/bin/gunicorn -b 0.0.0.0:5000 --log-level INFO api:app

@@ -55,7 +55,7 @@ class SSHAuth(object):
             user = None
             passwd = None
         self.db = mongo['sshauth']
-        if user is not None and passwd is not None and user is not '':
+        if user is not None and passwd is not None and user != '':
             self.db.authenticate(user, passwd, source=authdb)
         self.registry = self.db['registry']
 
@@ -245,7 +245,7 @@ class SSHAuth(object):
             comment += ' as %s' % (target_user)
         if serial is not None:
             comment += ' serial:%s' % (serial)
-        command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
+        command = ['ssh-keygen', '-m', 'PEM', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
                    '-C', comment]
         self.debug("command: %s" % command)
         cert = None
