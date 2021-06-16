@@ -6,7 +6,7 @@ from getpass import getpass, getuser
 import sys
 import argparse
 from json import dumps
-from base64 import b64encode
+from requests.auth import HTTPBasicAuth
 
 # Defaults
 URL = "https://sshauthapi.nersc.gov"
@@ -18,8 +18,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Request an ssh key pair ' +
                                      'from an ssh proxy server')
     parser.add_argument('--scope', '-s', help='name of scope')
-    parser.add_argument('--legacy', '-l', help='Pass auth credentials in '
-                        'legacy format.', action='store_true')
     parser.add_argument('--debug', '-d', help='additional debug',
                         action='store_true')
     parser.add_argument('--key', '-k', help='prompt for skey',
@@ -41,7 +39,7 @@ def error(message):
 def write_output(data, output):
     cert = None
     with open(output, 'w') as f:
-        os.chmod(output, 0600)
+        os.chmod(output, 0o600)
         for line in data.split('\n'):
             if line.startswith('ssh-rsa-cert'):
                 cert = line
@@ -70,14 +68,9 @@ def main():
 
     while (retry < MAXRETRY):
         pwd = getpass()
-        if args.legacy:
-            pstr = '%s:%s' % (user, pwd)
-        else:
-            pstr = b64encode('%s:%s' % (user, pwd))
-        h = {'Authorization': 'Basic %s' % (pstr)}
         if args.debug:
-            print(url, h)
-        resp = requests.post(url, headers=h, data=data)
+            print(url)
+        resp = requests.post(url, auth=HTTPBasicAuth(user, pwd), data=data)
         if resp.status_code != 200:
             retry += 1
             print(resp.text)
