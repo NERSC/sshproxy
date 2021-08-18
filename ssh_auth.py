@@ -55,7 +55,7 @@ class SSHAuth(object):
             user = None
             passwd = None
         self.db = mongo['sshauth']
-        if user is not None and passwd is not None and user is not '':
+        if user is not None and passwd is not None and user != '':
             self.db.authenticate(user, passwd, source=authdb)
         self.registry = self.db['registry']
 
@@ -70,7 +70,7 @@ class SSHAuth(object):
             return
         if self.lastconfig is not None:
             print("Re-loading config")
-        self.config = yaml.load(open(self.configfile))
+        self.config = yaml.load(open(self.configfile), Loader=yaml.FullLoader)
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
         self.scopes = self.config['scopes']
@@ -246,7 +246,7 @@ class SSHAuth(object):
         if serial is not None:
             comment += ' serial:%s' % (serial)
         command = ['ssh-keygen', '-q', '-f', privfile, '-N', '', '-t', 'rsa',
-                   '-C', comment]
+                   '-m', 'PEM', '-C', comment]
         self.debug("command: %s" % command)
         cert = None
         if self._run_command(command) != 0:

@@ -33,7 +33,7 @@ CONFIG = os.environ.get('CONFIG', 'config.yaml')
 JWT_PUB = os.environ.get("JWT_PUB")
 ssh_auth = SSHAuth(CONFIG)
 jwt_pub = None
-_VERSION = "1.1"
+_VERSION = "1.2.6"
 
 if JWT_PUB is not None and os.path.exists(JWT_PUB):
     with open(JWT_PUB) as f:

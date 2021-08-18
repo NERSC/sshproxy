@@ -113,6 +113,32 @@ class SSHAuthTestCase(unittest.TestCase):
         keys = self.ssh.get_keys(self.user, 'default')
         self.assertIn(k, keys)
 
+
+    def test_expire_collab(self):
+        """
+        Test key expiration in get for collab
+        """
+        now = time()
+        rec = {
+             'principle': 'collab',
+             'target_user': self.user,
+             'pubkey': 'ssh-rsa bogus_key blah serial:%d' % (now),
+             'type': 'user',
+             'enabled': True,
+             'scope': 'scope5',
+             'serial': '1620345413751214',
+             'created': now,
+             'expires': now+10
+             }
+        resp = self.registry.insert(rec)
+        keys = self.ssh.get_keys(self.user, 'scope5')
+        self.assertEquals(len(keys), 1)
+        self.registry.remove()
+        rec['expires'] = now - 10
+        resp = self.registry.insert(rec)
+        keys = self.ssh.get_keys(self.user, 'scope5')
+        self.assertEquals(len(keys), 0)
+
     def test_scope(self):
         """
         Test that scopes work.
@@ -191,6 +217,7 @@ class SSHAuthTestCase(unittest.TestCase):
         # Confirm we get a key for the target_user (e.g. collab account)
         keys = self.ssh.get_keys(tuser)
         self.assertIsNotNone(keys)
+        self.assertIn('from="127.0.0.1"', keys[0])
 
     def test_check_scope(self):
         with self.assertRaises(ScopeError):
@@ -398,7 +425,7 @@ class SSHAuthTestCase(unittest.TestCase):
         """
         fh, cfile = mkstemp()
         nscope = 'newscope'
-        conf = yaml.load(open(self.test_dir+'/config.yaml'))
+        conf = yaml.load(open(self.test_dir+'/config.yaml'), Loader=yaml.FullLoader)
         with open(cfile, "w") as outfile:
             yaml.dump(conf, outfile, default_flow_style=False)
         ssh = SSHAuth(cfile)
