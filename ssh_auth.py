@@ -19,6 +19,11 @@ class CollabError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+class PrivError(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
+
 
 class SSHAuth(object):
     """
@@ -434,6 +439,26 @@ class SSHAuth(object):
     def expireuser(self, user):
         up = {'$set': {'enabled': False}}
         self.registry.update({'principle': user}, up)
+
+    def revoke_key(self, request_user, serial):
+        if request_user not in self.config['global']['admin_users']:
+            raise PrivError("unallowed user: %s" % (request_user))
+        up = {'$set': {'enabled': False}}
+        resp = self.registry.update({'serial': serial}, up)
+        if resp['nModified'] > 0:
+            return True
+        else:
+            return False
+
+    def revoked(self):
+        """
+        Return a list of disabled keys that aren't expired.
+        """
+        now = time()
+        resp = ""
+        for k in self.registry.find({'enabled': False, 'expires': {"$gt": now}}):
+            resp += '%s\n' % (k['pubkey'])
+        return resp
 
 
 def main():  # pragma: no cover

@@ -269,6 +269,46 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 500)
         self.api.ssh_auth.expireuser = old
 
+    def test_revoke(self):
+        """
+        Test revoking a key.
+        """
+        self.api.ssh_auth.registry.remove({})
+        # Generate a key
+        data = '{"skey": "scope1-secret"}'
+        url = '/create_pair/scope1/'
+        rv = self.app.post(url, data=data, headers=self.headers)
+        keyv = rv.data.decode('utf-8').split('\n')[-1].split(' ')[-1]
+        serial = keyv.split(':')[-1]
+        # Create a key for a non-admin user
+        jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
+        hauser = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+
+        # Create a key for an admin user
+        jwt = encode({'user': 'admin'}, self.jwt_key, algorithm='RS256')
+        hadmin = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+
+
+        # Try revoking as regular user
+        rv = self.app.post('/revoke/%s' % (serial), headers=hauser)
+        self.assertEquals(rv.status_code, 401)
+        # Check key is still valid
+        act_keys = self.app.get('/get_keys/auser').data.decode('utf-8')
+        self.assertIn(serial, act_keys)
+        revoked = self.app.get('/revoked').data.decode('utf-8')
+        self.assertNotIn(serial, revoked)
+
+        # Try revoking as a real user
+        rv = self.app.post('/revoke/%s' % (serial), headers=hadmin)
+        self.assertEquals(rv.status_code, 200)
+
+        # Confirm key is gone
+        act_keys = self.app.get('/get_keys/auser').data.decode('utf-8')
+        self.assertNotIn(serial, act_keys)
+        revoked = self.app.get('/revoked').data.decode('utf-8')
+        self.assertIn(serial, revoked)
+
+
     def test_failed_count(self):
         """
         Test Failed Count Logic

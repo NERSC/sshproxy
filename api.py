@@ -21,7 +21,7 @@ See LICENSE for full text.
 
 from flask import Flask, request, Response
 import logging
-from ssh_auth import SSHAuth, ScopeError, CollabError
+from ssh_auth import SSHAuth, ScopeError, CollabError, PrivError
 from pam import authenticate
 import os
 import json
@@ -309,6 +309,34 @@ def reset():
         return auth_failure(str(err))
     except:
         return failure('reset')
+
+@app.route('/revoked', methods=['GET'])
+def revoked():
+    """
+    Get list of revoked keys
+    """
+    try:
+        resp = ssh_auth.revoked()
+    except:
+        return failure('revoke')
+    return resp
+
+
+@app.route('/revoke/<serial>', methods=['POST'])
+def revoke(serial):
+    """
+    Revoke a key based on its serial ID
+    """
+    try:
+        ctx = doauth()
+        ssh_auth.revoke_key(ctx.username, serial)
+        app.logger.info('revoking %s by %s' % (serial, ctx.username))
+        return "Success"
+    except AuthError as err:
+        return auth_failure(str(err))
+    except PrivError as err:
+        return Response('Unprivelged user', 401)
+
 
 
 # Return the version
