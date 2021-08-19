@@ -32,4 +32,11 @@ scopes:
      allowed_hosts:
        - '127.0.0.1'
      cacert: ./cacert
+  scope6:
+     lifetime: 1y
+     allowed_hosts:
+       - '127.0.0.1'
+     allowed_targets:
+       - '127.0.0.1'
+     cacert: ./cacert
 ...
