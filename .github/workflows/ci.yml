@@ -21,5 +21,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nose coverage mock
+          ssh-keygen -t rsa -P '' -f cacert
       - name: Run tests with pytest
         run: nosetests  --with-coverage --cover-html --cover-erase --cover-html-dir=`pwd`/coverage --cover-package . -s -x
