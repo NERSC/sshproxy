@@ -50,12 +50,18 @@ app.logger.debug('Initializing api')
 
 
 class ctx(object):
+    """
+    Context object class
+    """
     def __init__(self, type, username):
         self.type = type
         self.username = username
 
 
 class AuthError(Exception):
+    """
+    Auth Exceptions Class
+    """
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
@@ -75,6 +81,9 @@ def setup_logging():
 
 
 def get_skey(request):
+    """
+    Get the scope key from the JSON payload
+    """
     try:
         rqd = request.get_data()
         data = json.loads(rqd)
@@ -86,6 +95,9 @@ def get_skey(request):
 
 
 def get_target_user(request):
+    """
+    Get the target user from the JSON payload
+    """
     try:
         rqd = request.get_data()
         data = json.loads(rqd)
@@ -97,6 +109,9 @@ def get_target_user(request):
 
 
 def get_ip(request):
+    """
+    Get the IP for the request.  use the X-Foward-For if that is set.
+    """
     if request.headers.getlist("X-Forwarded-For"):
         ip = request.headers.getlist("X-Forwarded-For")[0]
     else:
@@ -105,6 +120,9 @@ def get_ip(request):
 
 
 def jwt_auth(tok):
+    """
+    Decode the JWT token and return the user.
+    """
     if jwt_pub is None:
         raise AuthError("JWT not configured")
     try:
@@ -335,10 +353,16 @@ def revoke(serial):
 # Return the version
 @app.route('/version', methods=['GET'])
 def version():
+    """
+    Endpoint to return the version
+    """
     return _VERSION
 
 
 # for the load balancer checks
 @app.route('/status.html', methods=['GET'])
 def status():
+    """
+    Endpoint to do a status check.  Just returns 'OK' if up.
+    """
     return "OK"

@@ -325,7 +325,7 @@ class APITestCase(unittest.TestCase):
         serial = keyv.split(':')[-1]
         # Create a key for a non-admin user
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
-        hauser = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        hauser = {'Authorization': 'Bearer %s' % (jwt)}
 
         # Create a key for an admin with a bad signing key
         jwt = encode({'user': 'admin'}, self.jwt_bad_key, algorithm='RS256')
@@ -333,7 +333,7 @@ class APITestCase(unittest.TestCase):
 
         # Create a key for an admin user
         jwt = encode({'user': 'admin'}, self.jwt_key, algorithm='RS256')
-        hadmin = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        hadmin = {'Authorization': 'Bearer %s' % (jwt)}
 
         # Try revoking as regular user
         rv = self.app.post('/revoke/%s' % (serial), headers=hauser)
