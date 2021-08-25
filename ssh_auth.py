@@ -19,10 +19,10 @@ class CollabError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+
 class PrivError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
-
 
 
 class SSHAuth(object):
@@ -383,13 +383,15 @@ class SSHAuth(object):
                }
         if target_user is not None:
             rec['target_user'] = target_user
+        if 'allowed_targets' in scope:
+            rec['allowed_targets'] = scope['allowed_targets']
         self.registry.insert(rec)
         if putty:
             return pair['ppk'], ''
         else:
             return pair['private'], pair['cert']
 
-    def get_keys(self, user, scopename=None):
+    def get_keys(self, user, scopename=None, ip=None):
         resp = []
         now = time()
         q = {'principle': user, 'enabled': True}
@@ -403,6 +405,8 @@ class SSHAuth(object):
             elif 'target_user' in rec:
                 # Skip target_user records since this
                 # would mean it is a collab key
+                continue
+            elif 'allowed_targets' in rec and ip not in rec['allowed_targets']:
                 continue
             else:
                 kscope = rec['scope']
@@ -420,6 +424,8 @@ class SSHAuth(object):
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
+            elif 'allowed_targets' in rec and ip not in rec['allowed_targets']:
+                continue
             else:
                 kscope = rec['scope']
                 allowed_hosts = None

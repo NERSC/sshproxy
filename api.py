@@ -2,19 +2,19 @@
 
 
 """
-SSH Proxy (sshproxy), Copyright (c) 2019, The Regents of the University of California, 
-through Lawrence Berkeley National Laboratory (subject to receipt of any required 
+SSH Proxy (sshproxy), Copyright (c) 2019, The Regents of the University of California,
+through Lawrence Berkeley National Laboratory (subject to receipt of any required
 approvals from the U.S. Dept. of Energy).  All rights reserved.
- 
-If you have questions about your rights to use or distribute this software, 
+
+If you have questions about your rights to use or distribute this software,
 please contact Berkeley Lab's Intellectual Property Office at  IPO@lbl.gov.
- 
-NOTICE.  This Software was developed under funding from the U.S. Department of Energy 
-and the U.S. Government consequently retains certain rights. As such, the U.S. 
-Government has been granted for itself and others acting on its behalf a paid-up, 
-nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute 
-copies to the public, prepare derivative works, and perform publicly and display 
-publicly, and to permit other to do so. 
+
+NOTICE.  This Software was developed under funding from the U.S. Department of Energy
+and the U.S. Government consequently retains certain rights. As such, the U.S.
+Government has been granted for itself and others acting on its behalf a paid-up,
+nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute
+copies to the public, prepare derivative works, and perform publicly and display
+publicly, and to permit other to do so.
 
 See LICENSE for full text.
 """
@@ -47,6 +47,7 @@ if 'SERVER_SOFTWARE' in os.environ:
 else:
     logname = 'sshproxy'
 app.logger.debug('Initializing api')
+
 
 class ctx(object):
     def __init__(self, type, username):
@@ -95,19 +96,13 @@ def get_target_user(request):
     return None
 
 
-def legacyauth():
-    """
-    Support legacy auth for a limited time.
-    """
-    # Try legacy
-    if 'Authorization' not in request.headers:
-        return (None, None)
-    authh = request.headers['Authorization']
-    if not authh.startswith('Basic '):
-        return (None, None)
-    astr = authh.split(' ')[1]
-    (username, password) = astr.split(':')
-    return (username, password)
+def get_ip(request):
+    if request.headers.getlist("X-Forwarded-For"):
+        ip = request.headers.getlist("X-Forwarded-For")[0]
+    else:
+        ip = request.remote_addr
+    return ip
+
 
 def jwt_auth(tok):
     if jwt_pub is None:
@@ -120,8 +115,9 @@ def jwt_auth(tok):
 
     if 'user' not in pack:
         raise AuthError("User not encoded in JWT")
-    
+
     return pack['user']
+
 
 def doauth():
     """
@@ -144,12 +140,6 @@ def doauth():
             raise AuthError("Unknown auth method")
     else:
         raise AuthError("Authentication required")
-
-        # This should eventually get dropped
-        # (username, password) = legacyauth()
-        # if username is None or password is None:
-        #     raise AuthError("Username and password required")
-        # authmode = 'legacy'
 
     if ssh_auth.check_failed_count(username):
         raise AuthError('Too many failed logins %s' % (username))
@@ -186,7 +176,7 @@ def create_pair_scope(scope):
         user = ctx.username
         skey = get_skey(request)
         target_user = get_target_user(request)
-        raddr = request.remote_addr
+        raddr = get_ip(request)
         putty = False
         if 'putty' in request.args:
             putty = True
@@ -267,7 +257,8 @@ def get_keys(username):
     """
     try:
         app.logger.info('get keys for %s' % (username))
-        keys = ssh_auth.get_keys(username, None)
+        ip = get_ip(request)
+        keys = ssh_auth.get_keys(username, None, ip)
         mess = ''
         for k in keys:
             mess += k + '\n'
@@ -283,7 +274,8 @@ def get_keys_scope(scope, username):
     """
     try:
         app.logger.info('get keys for %s in %s' % (username, scope))
-        keys = ssh_auth.get_keys(username, scope)
+        ip = get_ip(request)
+        keys = ssh_auth.get_keys(username, scope, ip)
         mess = ''
         for k in keys:
             mess += k + '\n'
@@ -309,6 +301,7 @@ def reset():
         return auth_failure(str(err))
     except:
         return failure('reset')
+
 
 @app.route('/revoked', methods=['GET'])
 def revoked():
@@ -336,7 +329,6 @@ def revoke(serial):
         return auth_failure(str(err))
     except PrivError as err:
         return Response('Unprivelged user', 401)
-
 
 
 # Return the version

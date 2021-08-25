@@ -1,5 +1,7 @@
 # Change Log
 
+## Version X.X
+- Add support for specifying target_hosts
 - Add ability to revoke keys and list revoked keys
 
 ## Version 1.3
