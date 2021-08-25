@@ -22,5 +22,9 @@ jobs:
           pip install -r requirements.txt
           pip install nose coverage mock
           ssh-keygen -t rsa -P '' -f cacert
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.6.0
+        with:
+          mongodb-version: 4.0
       - name: Run tests with pytest
         run: nosetests  --with-coverage --cover-html --cover-erase --cover-html-dir=`pwd`/coverage --cover-package . -s -x
