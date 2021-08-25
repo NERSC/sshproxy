@@ -23,6 +23,7 @@ from base64 import b64encode
 from mock import MagicMock
 from jwt import encode
 
+
 def versiontuple(v):
     return tuple(map(int, (v.split("."))))
 
@@ -69,10 +70,10 @@ class APITestCase(unittest.TestCase):
 
         self.badmethod = {'Authorization': 'Blah ' + bstr}
         self.api.ssh_auth.failed_count = {}
-        jwtkf=os.path.join(test_dir, 'jwtRS256.key')
+        jwtkf = os.path.join(test_dir, 'jwtRS256.key')
         with open(jwtkf) as f:
             self.jwt_key = f.read()
-        jwtkf=os.path.join(test_dir, 'jwtRS256bad.key')
+        jwtkf = os.path.join(test_dir, 'jwtRS256bad.key')
         with open(jwtkf) as f:
             self.jwt_bad_key = f.read()
 
@@ -81,7 +82,7 @@ class APITestCase(unittest.TestCase):
 
     def make_header(self, authstr):
         encoded = b64encode(authstr.encode()).decode('utf-8')
-        return {'Authorization': 'Basic %s' % (encoded) }
+        return {'Authorization': 'Basic %s' % (encoded)}
 
     def get_all(self):
         r = []
@@ -120,7 +121,6 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post('/create_pair', headers=self.headers)
         self.assertEquals(rv.status_code, 500)
         self.api.ssh_auth.create_pair = old
-
 
     def test_jwt(self):
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
@@ -313,7 +313,6 @@ class APITestCase(unittest.TestCase):
         jwt = encode({'user': 'admin'}, self.jwt_key, algorithm='RS256')
         hadmin = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
 
-
         # Try revoking as regular user
         rv = self.app.post('/revoke/%s' % (serial), headers=hauser)
         self.assertEquals(rv.status_code, 401)
@@ -332,7 +331,6 @@ class APITestCase(unittest.TestCase):
         self.assertNotIn(serial, act_keys)
         revoked = self.app.get('/revoked').data.decode('utf-8')
         self.assertIn(serial, revoked)
-
 
     def test_failed_count(self):
         """
