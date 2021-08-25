@@ -94,6 +94,11 @@ respectively.
 
 **cacert**: Specify a ssh CA certificate to user for signing the public key.
 
+**collaboration**: True/False If true then request will generate a collaboration account key.
+This requires a target_user to be specified.
+
+**allowed_targets**: Specify a list of allowed target users for collab scopes.
+
 ### PAM Configuration
 
 Authentications is configured via PAM.  Currently just the authenticate interface is used.  Here is an example configuration that uses the common auth stack on the system.

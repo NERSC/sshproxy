@@ -1,5 +1,9 @@
 # Change Log
 
+## Version 1.x
+- Add allowed_targets to limit collab account
+  choices for a scope
+
 ## Version 1.3
 - Add Windows/Putty Support
 

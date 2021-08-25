@@ -186,7 +186,7 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIsNone(ssh._sign('blah', 'auser', '123', None))
 
     def test_run_command(self):
-        self.ssh.debug_on = True
+        self.ssh.debug_on = False
         res = self.ssh._run_command('/asdf')
         self.assertNotEqual(res, 0)
 
@@ -196,12 +196,21 @@ class SSHAuthTestCase(unittest.TestCase):
         """
         scope5 = 'scope5'
         tuser = 'tuser'
+
+        # Omit target_user which is required
         with self.assertRaises(ScopeError):
-            p = self.ssh.create_pair(self.user, _localhost, scope5)
+            self.ssh.create_pair(self.user, _localhost, scope5)
+
+        # Collab account error
         with self.assertRaises(CollabError):
-            p, c = self.ssh.create_pair(self.user, _localhost, scope5,
+            self.ssh.create_pair(self.user, _localhost, scope5,
                                         target_user=tuser)
         self.ssh._check_collaboration_account = MagicMock(return_value=True)
+
+        # Test that target user is in allowed list
+        with self.assertRaises(CollabError):
+            self.ssh.create_pair(self.user, _localhost, scope5,
+                                        target_user=self.user)
         p, c = self.ssh.create_pair(self.user, _localhost, scope5,
                                     target_user=tuser)
         cout = self.read_cert(c)

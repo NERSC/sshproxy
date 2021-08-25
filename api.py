@@ -245,7 +245,8 @@ def sign_host(scope):
         cert = ssh_auth.sign_host(raddr, scope)
         app.logger.info('signed %s' % (raddr))
         return cert
-    except:
+    except Exception as e:
+        app.logger.warn(e)
         return failure('sign_host')
 
 

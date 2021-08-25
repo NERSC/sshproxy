@@ -48,7 +48,7 @@ class SSHAuth(object):
         if mongo_host.startswith('mongodb://'):
             (user, passwd, hosts, replset, authdb) = \
                 self.parse_mongo_url(mongo_host)
-            print('user=%s host=%s replset=%s authdb=%s' % (user, hosts, replset, authdb))
+            self.debug('user=%s host=%s replset=%s authdb=%s' % (user, hosts, replset, authdb))
             mongo = MongoReplicaSetClient(hosts, replicaset=replset)
         else:
             mongo = MongoClient(mongo_host)
@@ -69,7 +69,7 @@ class SSHAuth(object):
         if mtime == self.lastconfig:
             return
         if self.lastconfig is not None:
-            print("Re-loading config")
+            self.debug("Re-loading config")
         self.config = yaml.load(open(self.configfile), Loader=yaml.FullLoader)
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
@@ -356,6 +356,11 @@ class SSHAuth(object):
             if not self._check_collaboration_account(target_user, user):
                 raise CollabError("User %s not a member of %s" %
                                   (user, target_user))
+            allowed_targets = scope.get('allowed_targets', [target_user])
+            if target_user not in allowed_targets:
+                raise CollabError("Target user %s not in allowed list" %
+                                  (target_user))
+                
         else:
             target_user = None
 

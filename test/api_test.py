@@ -22,6 +22,7 @@ from time import time
 from base64 import b64encode
 from mock import MagicMock
 from jwt import encode
+import logging
 
 def versiontuple(v):
     return tuple(map(int, (v.split("."))))
@@ -63,6 +64,8 @@ class APITestCase(unittest.TestCase):
         self.api = api
         self.api.authenticate = MagicMock(side_effect=_my_auth)
         self.app = api.app.test_client()
+        self.api.app.logger.setLevel(logging.ERROR)
+
         self.headers = self.make_header('auser:password')
         self.badheaders = self.make_header('auser:bad')
         bstr = b64encode(b'auser:bad').decode('utf-8')
@@ -121,12 +124,12 @@ class APITestCase(unittest.TestCase):
 
     def test_jwt(self):
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
-        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 200)
 
         jwt = encode({'user': 'auser'}, self.jwt_bad_key, algorithm='RS256')
-        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 401)
 
