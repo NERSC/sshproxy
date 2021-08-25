@@ -22,6 +22,7 @@ from time import time
 from base64 import b64encode
 from mock import MagicMock
 from jwt import encode
+import logging
 
 
 def versiontuple(v):
@@ -64,6 +65,8 @@ class APITestCase(unittest.TestCase):
         self.api = api
         self.api.authenticate = MagicMock(side_effect=_my_auth)
         self.app = api.app.test_client()
+        self.api.app.logger.setLevel(logging.ERROR)
+
         self.headers = self.make_header('auser:password')
         self.badheaders = self.make_header('auser:bad')
         bstr = b64encode(b'auser:bad').decode('utf-8')
@@ -124,12 +127,12 @@ class APITestCase(unittest.TestCase):
 
     def test_jwt(self):
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
-        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 200)
 
         jwt = encode({'user': 'auser'}, self.jwt_bad_key, algorithm='RS256')
-        h = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 401)
 
@@ -307,11 +310,11 @@ class APITestCase(unittest.TestCase):
         serial = keyv.split(':')[-1]
         # Create a key for a non-admin user
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
-        hauser = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        hauser = {'Authorization': 'Bearer %s' % (jwt)}
 
         # Create a key for an admin user
         jwt = encode({'user': 'admin'}, self.jwt_key, algorithm='RS256')
-        hadmin = {'Authorization': 'Bearer %s' % (jwt.decode('utf-8'))}
+        hadmin = {'Authorization': 'Bearer %s' % (jwt)}
 
         # Try revoking as regular user
         rv = self.app.post('/revoke/%s' % (serial), headers=hauser)
