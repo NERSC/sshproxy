@@ -380,7 +380,7 @@ class SSHAuthTestCase(unittest.TestCase):
 
         # Test against a bogus host
         with self.assertRaises(OSError):
-            self.ssh._get_host_key('127.0.0.2')
+            self.ssh._get_host_key('8.8.8.8')
 
     def test_sign_host(self):
         """
