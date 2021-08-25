@@ -4,6 +4,7 @@ global:
   mongo_db: sshauth
   registry: registry
   unallowed_users: [ 'root', 'cuser' ]
+  admin_users: ['admin']
 scopes:
   default:
      lifetime: 1d
