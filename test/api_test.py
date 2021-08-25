@@ -80,6 +80,9 @@ class APITestCase(unittest.TestCase):
         with open(jwtkf) as f:
             self.jwt_bad_key = f.read()
 
+    def reset_registry(self):
+        self.api.ssh_auth.registry.remove({})
+
     def make_header(self, authstr):
         encoded = b64encode(authstr.encode()).decode('utf-8')
         return {'Authorization': 'Basic %s' % (encoded)}
@@ -192,6 +195,28 @@ class APITestCase(unittest.TestCase):
         self.assertEquals(rv.status_code, 500)
         self.api.ssh_auth.get_keys = old
 
+    def test_get_keys_allowed_targets(self):
+        """
+        Test for allowed_targets
+        """
+        self.reset_registry()
+        data = '{}'
+        url = '/create_pair/scope6/'
+        rv = self.app.post(url, data=data, headers=self.headers)
+        self.assertEquals(rv.status_code, 200)
+        rv = self.app.get('/get_keys/auser')
+        # Test from allowed host
+        self.assertEquals(rv.status_code, 200)
+        self.assertIn(b'auser', rv.data)
+        self.assertIn(b'ssh-rsa', rv.data)
+        # Test from a non-allowed host
+        h = self.headers
+        h = {'X-Forwarded-For': ['8.8.8.8']}
+        rv = self.app.get('/get_keys/auser', headers=h)
+        self.assertEquals(rv.status_code, 200)
+        self.assertNotIn(b'auser', rv.data)
+        self.assertNotIn(b'ssh-rsa', rv.data)
+
     def test_create_pair_scope(self):
         data = '{"skey": "scope1-secret"}'
         url = '/create_pair/scope1/'
@@ -276,7 +301,7 @@ class APITestCase(unittest.TestCase):
         """
         Test revoking a key.
         """
-        self.api.ssh_auth.registry.remove({})
+        self.reset_registry()
         # Generate a key
         data = '{"skey": "scope1-secret"}'
         url = '/create_pair/scope1/'

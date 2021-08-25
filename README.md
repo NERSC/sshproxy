@@ -117,6 +117,11 @@ scopes:
 **allowed_remote_addrs**: The list of IP addresses that the ssh connection can
 originate from.  This requires a CA certificate for the scope.
 
+**allowed_targets**: The list of target IP addresses that should recieve the keys.
+If a target ssh server host is in the list it will recieve keys for this scope,
+otherwise it will not.  Note that CA generated keys must be dealt with separately
+by choosing a different CA key.
+
 **allowed_users**: The list of users who are allowed to use the scope.
 
 **lifetime**: The lifetime of the key.  If it is an integer it is treated as
@@ -128,7 +133,7 @@ respectively.
 **collaboration**: True/False If true then request will generate a collaboration account key.
 This requires a target_user to be specified.
 
-**allowed_targets**: Specify a list of allowed target users for collab scopes.
+**allowed_target_users**: Specify a list of allowed target users for collab scopes.
 
 ### PAM Configuration
 

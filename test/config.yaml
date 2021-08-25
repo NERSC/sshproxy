@@ -29,9 +29,16 @@ scopes:
   scope5:
      lifetime: 1y
      collaboration: True
-     allowed_targets:
+     allowed_target_users:
        - tuser
      allowed_hosts:
+       - '127.0.0.1'
+     cacert: ./cacert
+  scope6:
+     lifetime: 1y
+     allowed_hosts:
+       - '127.0.0.1'
+     allowed_targets:
        - '127.0.0.1'
      cacert: ./cacert
 ...

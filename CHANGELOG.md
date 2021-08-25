@@ -3,6 +3,7 @@
 ## Version 1.x
 - Add allowed_targets to limit collab account
   choices for a scope
+- Add support for specifying target_hosts
 - Add ability to revoke keys and list revoked keys
 
 ## Version 1.3

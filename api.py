@@ -96,19 +96,12 @@ def get_target_user(request):
     return None
 
 
-def legacyauth():
-    """
-    Support legacy auth for a limited time.
-    """
-    # Try legacy
-    if 'Authorization' not in request.headers:
-        return (None, None)
-    authh = request.headers['Authorization']
-    if not authh.startswith('Basic '):
-        return (None, None)
-    astr = authh.split(' ')[1]
-    (username, password) = astr.split(':')
-    return (username, password)
+def get_ip(request):
+    if request.headers.getlist("X-Forwarded-For"):
+        ip = request.headers.getlist("X-Forwarded-For")[0]
+    else:
+        ip = request.remote_addr
+    return ip
 
 
 def jwt_auth(tok):
@@ -148,12 +141,6 @@ def doauth():
     else:
         raise AuthError("Authentication required")
 
-        # This should eventually get dropped
-        # (username, password) = legacyauth()
-        # if username is None or password is None:
-        #     raise AuthError("Username and password required")
-        # authmode = 'legacy'
-
     if ssh_auth.check_failed_count(username):
         raise AuthError('Too many failed logins %s' % (username))
     if not authenticate(username, password, service='sshauth'):
@@ -189,7 +176,7 @@ def create_pair_scope(scope):
         user = ctx.username
         skey = get_skey(request)
         target_user = get_target_user(request)
-        raddr = request.remote_addr
+        raddr = get_ip(request)
         putty = False
         if 'putty' in request.args:
             putty = True
@@ -271,7 +258,8 @@ def get_keys(username):
     """
     try:
         app.logger.info('get keys for %s' % (username))
-        keys = ssh_auth.get_keys(username, None)
+        ip = get_ip(request)
+        keys = ssh_auth.get_keys(username, None, ip)
         mess = ''
         for k in keys:
             mess += k + '\n'
@@ -287,7 +275,8 @@ def get_keys_scope(scope, username):
     """
     try:
         app.logger.info('get keys for %s in %s' % (username, scope))
-        keys = ssh_auth.get_keys(username, scope)
+        ip = get_ip(request)
+        keys = ssh_auth.get_keys(username, scope, ip)
         mess = ''
         for k in keys:
             mess += k + '\n'
