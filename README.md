@@ -58,7 +58,38 @@ Method: DELETE
 
 Not yet implemented.
 
+### /revoke/\<serial\>
+
+Method: POST  
+Parameter: Serial ID for key  
+Header: Authorization with JWT that is part of admin list
+
+This end-point will revoke a key using its serial number.  This requires
+an token assoicated with a user that is in the admin list which is specified
+in the global section of the config file with the `admin_users` key.  Since it 
+is a JWT token, the user can be a pseduo user simply used to perform admin 
+operations.
+
+Once a token is revoked, it will not show up in a get_keys call and it will be
+listed in the revoked call until the key has expired.
+
+### /revoked
+
+Method: GET  
+Parameter: None
+Header: None
+
+This returns a list of revoked keys.  This is determined by looking for keys that
+are disabled but not yet expired.  Keys can be revoked using the `revoke` operation
+above.
+
+
 ## Configuration
+
+### Global
+
+**admin_user**: A list of user names that have admin rights.  Currently this is used to
+revoke keys.
 
 ### Scopes
 
