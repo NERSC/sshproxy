@@ -113,7 +113,6 @@ class SSHAuthTestCase(unittest.TestCase):
         keys = self.ssh.get_keys(self.user, 'default')
         self.assertIn(k, keys)
 
-
     def test_expire_collab(self):
         """
         Test key expiration in get for collab
@@ -130,12 +129,12 @@ class SSHAuthTestCase(unittest.TestCase):
              'created': now,
              'expires': now+10
              }
-        resp = self.registry.insert(rec)
+        self.registry.insert(rec)
         keys = self.ssh.get_keys(self.user, 'scope5')
         self.assertEquals(len(keys), 1)
         self.registry.remove()
         rec['expires'] = now - 10
-        resp = self.registry.insert(rec)
+        self.registry.insert(rec)
         keys = self.ssh.get_keys(self.user, 'scope5')
         self.assertEquals(len(keys), 0)
 
@@ -459,15 +458,6 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertEquals(list[1], 'passwd')
         self.assertEquals(list[2], ['server1', 'server2'])
         self.assertEquals(list[3], 'blah')
-        pmongo_host = None
-        if 'mongo_host' in os.environ:
-            pmongo_host = os.environ['mongo_host'] 
-        os.environ['mongo_host'] = 'mongodb://:@localhost'
-        ssh = SSHAuth(self.test_dir + '/config.yaml')
-        if pmongo_host:
-            os.environ['mongo_host'] = pmongo_host
-        else:
-            os.environ.pop('mongo_host')
 
 
 if __name__ == '__main__':

@@ -126,7 +126,8 @@ def doauth():
     """
     auth = request.authorization
     if auth is not None:
-        if auth.username is None or auth.password is None:
+        if auth.username is None or auth.password is None or \
+           auth.username == '' or auth.password == '':
             raise AuthError("Username and password required")
         username = auth.username
         password = auth.password
