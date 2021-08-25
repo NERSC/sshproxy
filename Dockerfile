@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.8-buster
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -y update && apt-get -y install nslcd libpam-dev vim putty-tools
