@@ -83,7 +83,7 @@ class SSHAuth(object):
         if mtime == self.lastconfig:
             return
         if self.lastconfig is not None:
-            self.debug("Re-loading config")
+            self._debug("Re-loading config")
         self.config = yaml.load(open(self.configfile), Loader=yaml.FullLoader)
         gconfig = self.config.get('global', {})
         self.unallowed_users = gconfig.get('unallowed_users', ['root'])
