@@ -118,6 +118,16 @@ class APITestCase(unittest.TestCase):
         rv = self.app.post('/create_pair')
         self.assertEquals(rv.status_code, 401)
 
+        # Missing user
+        h = self.make_header(':pass')
+        rv = self.app.post('/create_pair', headers=h)
+        self.assertEquals(rv.status_code, 401)
+
+        # Missing password
+        h = self.make_header('auser:')
+        rv = self.app.post('/create_pair', headers=h)
+        self.assertEquals(rv.status_code, 401)
+
         # Raise an unexpected error
         old = self.api.ssh_auth.create_pair
         self.api.ssh_auth.create_pair = MagicMock(side_effect=KeyError())
@@ -126,12 +136,20 @@ class APITestCase(unittest.TestCase):
         self.api.ssh_auth.create_pair = old
 
     def test_jwt(self):
+        # Happy case
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
         h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 200)
 
+        # Bad key
         jwt = encode({'user': 'auser'}, self.jwt_bad_key, algorithm='RS256')
+        h = {'Authorization': 'Bearer %s' % (jwt)}
+        rv = self.app.post('/create_pair', headers=h)
+        self.assertEqual(rv.status_code, 401)
+
+        # Missing user
+        jwt = encode({}, self.jwt_key, algorithm='RS256')
         h = {'Authorization': 'Bearer %s' % (jwt)}
         rv = self.app.post('/create_pair', headers=h)
         self.assertEqual(rv.status_code, 401)
@@ -312,6 +330,10 @@ class APITestCase(unittest.TestCase):
         jwt = encode({'user': 'auser'}, self.jwt_key, algorithm='RS256')
         hauser = {'Authorization': 'Bearer %s' % (jwt)}
 
+        # Create a key for an admin with a bad signing key
+        jwt = encode({'user': 'admin'}, self.jwt_bad_key, algorithm='RS256')
+        hbad = {'Authorization': 'Bearer %s' % (jwt)}
+
         # Create a key for an admin user
         jwt = encode({'user': 'admin'}, self.jwt_key, algorithm='RS256')
         hadmin = {'Authorization': 'Bearer %s' % (jwt)}
@@ -319,6 +341,11 @@ class APITestCase(unittest.TestCase):
         # Try revoking as regular user
         rv = self.app.post('/revoke/%s' % (serial), headers=hauser)
         self.assertEquals(rv.status_code, 401)
+
+        # Try revoking with bad signing key
+        rv = self.app.post('/revoke/%s' % (serial), headers=hbad)
+        self.assertEquals(rv.status_code, 401)
+
         # Check key is still valid
         act_keys = self.app.get('/get_keys/auser').data.decode('utf-8')
         self.assertIn(serial, act_keys)
@@ -370,6 +397,13 @@ class APITestCase(unittest.TestCase):
             self.assertEquals(fc[u]['count'], 5)
             self.assertGreaterEqual(int(fc[u]['last']), int(before))
         fc = {}
+
+    def test_auth_errors(self):
+        jwt_back = self.api.jwt_pub
+        self.api.jwt_pub = None
+        with self.assertRaises(self.api.AuthError):
+            self.api.jwt_auth(None)
+        self.api.jwt_pub = jwt_back
 
 
 if __name__ == '__main__':
