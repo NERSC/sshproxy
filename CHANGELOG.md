@@ -1,5 +1,8 @@
 # Change Log
 
+## Version X.X
+- Add support for specifying target_hosts
+
 ## Version 1.3
 - Add Windows/Putty Support
 
