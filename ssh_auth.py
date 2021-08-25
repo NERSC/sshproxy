@@ -56,7 +56,7 @@ class SSHAuth(object):
         if mongo_host.startswith('mongodb://'):
             (user, passwd, hosts, replset, authdb) = \
                 self.parse_mongo_url(mongo_host)
-            self.debug('user=%s host=%s replset=%s authdb=%s' % (user, hosts, replset, authdb))
+            self._debug('user=%s host=%s replset=%s authdb=%s' % (user, hosts, replset, authdb))
             mongo = MongoReplicaSetClient(hosts, replicaset=replset)
         else:
             mongo = MongoClient(mongo_host)
