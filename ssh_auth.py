@@ -19,10 +19,10 @@ class CollabError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+
 class PrivError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
-
 
 
 class SSHAuth(object):
@@ -365,7 +365,6 @@ class SSHAuth(object):
             if target_user not in allowed_targets:
                 raise CollabError("Target user %s not in allowed list" %
                                   (target_user))
-                
         else:
             target_user = None
 

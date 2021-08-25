@@ -2,19 +2,19 @@
 
 
 """
-SSH Proxy (sshproxy), Copyright (c) 2019, The Regents of the University of California, 
-through Lawrence Berkeley National Laboratory (subject to receipt of any required 
+SSH Proxy (sshproxy), Copyright (c) 2019, The Regents of the University of California,
+through Lawrence Berkeley National Laboratory (subject to receipt of any required
 approvals from the U.S. Dept. of Energy).  All rights reserved.
- 
-If you have questions about your rights to use or distribute this software, 
+
+If you have questions about your rights to use or distribute this software,
 please contact Berkeley Lab's Intellectual Property Office at  IPO@lbl.gov.
- 
-NOTICE.  This Software was developed under funding from the U.S. Department of Energy 
-and the U.S. Government consequently retains certain rights. As such, the U.S. 
-Government has been granted for itself and others acting on its behalf a paid-up, 
-nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute 
-copies to the public, prepare derivative works, and perform publicly and display 
-publicly, and to permit other to do so. 
+
+NOTICE.  This Software was developed under funding from the U.S. Department of Energy
+and the U.S. Government consequently retains certain rights. As such, the U.S.
+Government has been granted for itself and others acting on its behalf a paid-up,
+nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute
+copies to the public, prepare derivative works, and perform publicly and display
+publicly, and to permit other to do so.
 
 See LICENSE for full text.
 """
@@ -47,6 +47,7 @@ if 'SERVER_SOFTWARE' in os.environ:
 else:
     logname = 'sshproxy'
 app.logger.debug('Initializing api')
+
 
 class ctx(object):
     def __init__(self, type, username):
@@ -109,6 +110,7 @@ def legacyauth():
     (username, password) = astr.split(':')
     return (username, password)
 
+
 def jwt_auth(tok):
     if jwt_pub is None:
         raise AuthError("JWT not configured")
@@ -120,8 +122,9 @@ def jwt_auth(tok):
 
     if 'user' not in pack:
         raise AuthError("User not encoded in JWT")
-    
+
     return pack['user']
+
 
 def doauth():
     """
@@ -311,6 +314,7 @@ def reset():
     except:
         return failure('reset')
 
+
 @app.route('/revoked', methods=['GET'])
 def revoked():
     """
@@ -337,7 +341,6 @@ def revoke(serial):
         return auth_failure(str(err))
     except PrivError as err:
         return Response('Unprivelged user', 401)
-
 
 
 # Return the version
