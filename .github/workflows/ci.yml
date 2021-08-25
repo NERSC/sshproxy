@@ -22,4 +22,4 @@ jobs:
           pip install -r requirements.txt
           pip install nose coverage mock
       - name: Run tests with pytest
-        run: pytest 
+        run: nosetests  --with-coverage --cover-html --cover-erase --cover-html-dir=`pwd`/coverage --cover-package . -s -x
