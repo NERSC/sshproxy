@@ -27,7 +27,7 @@ jobs:
         with:
           mongodb-version: 4.0
       - name: Run tests with nosetests
-        run: nosetests  --with-coverage --cover-xml --cover-html --cover-erase --cover-html-dir=`pwd`/coverage --cover-package . -s -x
+        run: nosetests  --with-coverage --cover-package . -s -x
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
