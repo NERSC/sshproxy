@@ -163,7 +163,7 @@ class SSHAuth(object):
         try:
             errno = call(command, stdout=out, stderr=out)
         except Exception as err:
-            print(err)
+            self._debug(err)
             return -1
         return errno
 

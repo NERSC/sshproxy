@@ -128,7 +128,7 @@ def jwt_auth(tok):
     try:
         pack = decode(tok[7:], key=jwt_pub, verify=True, algorithms='RS256')
     except PyJWTError:
-        print("Failed to verify JWT")
+        app.logger.info("Failed to verify JWT")
         raise AuthError("JWT verify failed")
 
     if 'user' not in pack:

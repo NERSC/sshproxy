@@ -164,17 +164,26 @@ class SSHAuthTestCase(unittest.TestCase):
             p = self.ssh.create_pair(self.user, _localhost, 'scope4')
 
     def test_generate_pair(self):
+        """
+        Test generating a key pair
+        """
         ssh = SSHAuth(self.test_dir+'/config.yaml')
         ssh._run_command = MagicMock(return_value=-1)
         with self.assertRaises(OSError):
             ssh._generate_pair('auser')
 
     def test_putty(self):
+        """
+        Test generating a key pair for putty
+        """
         ssh = SSHAuth(self.test_dir+'/config.yaml')
         ssh._run_command = MagicMock(side_effect=_my_run)
         ssh._generate_pair('auser', putty=True)
 
     def test_sign(self):
+        """
+        Test signing method
+        """
         ssh = SSHAuth(self.test_dir+'/config.yaml')
         scope = {
             'scopename': 'scope1',
@@ -185,6 +194,9 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIsNone(ssh._sign('blah', 'auser', '123', None))
 
     def test_run_command(self):
+        """
+        Test run command helper
+        """
         self.ssh.debug_on = False
         res = self.ssh._run_command('/asdf')
         self.assertNotEqual(res, 0)
@@ -228,6 +240,9 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertIn('from="127.0.0.1"', keys[0])
 
     def test_check_scope(self):
+        """
+        Test checking a scope
+        """
         with self.assertRaises(ScopeError):
             p = self.ssh._check_scope(None, 'auser', _localhost, None)
         scope = self.ssh._get_scope('scope4')
@@ -237,6 +252,9 @@ class SSHAuthTestCase(unittest.TestCase):
             p = self.ssh._check_scope(scope, 'buser', _localhost, None)
 
     def test_allowed(self):
+        """
+        Test allowed method
+        """
         p = self.ssh._check_allowed('auser', None)
         self.assertTrue(p)
         with self.assertRaises(OSError):
@@ -245,6 +263,9 @@ class SSHAuthTestCase(unittest.TestCase):
             p = self.ssh.create_pair('root', _localhost, None)
 
     def test_allowed_host(self):
+        """
+        Test allowed host method embeds the constraint
+        """
         scope1 = 'scope1'
         secret = 'scope1-secret'
         certkey = 'temp-cert.pub'
@@ -269,6 +290,9 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertTrue(found)
 
     def test_expiration_storage(self):
+        """
+        Test that expiration is stored
+        """
         slop = 1
         DAY = 24*3600
         scope2 = 'scope2'
@@ -283,6 +307,10 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertLess(exp, now + DAY + slop)
 
     def test_autoexpire(self):
+        """
+        Test that autoexpiration works
+        """
+        # Create an expired key
         rec = {'principle': 'auser',
                'pubkey': 'bogus1',
                'type': 'user',
@@ -293,6 +321,7 @@ class SSHAuthTestCase(unittest.TestCase):
                'expires': time() - 100
                }
         rec1 = self.registry.insert(rec)
+        # Create an unexpired key
         rec = {'principle': 'auser',
                'pubkey': 'bogus2',
                'type': 'user',
@@ -303,11 +332,14 @@ class SSHAuthTestCase(unittest.TestCase):
                'expires': time() + 100
                }
         rec2 = self.registry.insert(rec)
+        # Check that the right keys are returned
         p = self.ssh.get_keys('auser')
         self.assertIn('bogus2', p)
         self.assertNotIn('bogus1', p)
+        # Check that the expired key is disabled
         up = self.registry.find_one({'_id': rec1})
         self.assertFalse(up['enabled'])
+        # Check that the unexpired key is enabled
         up = self.registry.find_one({'_id': rec2})
         self.assertTrue(up['enabled'])
 
@@ -384,7 +416,7 @@ class SSHAuthTestCase(unittest.TestCase):
 
     def test_sign_host(self):
         """
-        Test _get_host_key
+        Test host signing
         """
         # Get the key for cori01-224
         self.registry.remove({})
@@ -455,6 +487,9 @@ class SSHAuthTestCase(unittest.TestCase):
         os.remove(cfile)
 
     def test_mongo_parse(self):
+        """
+        Test mongo parse function
+        """
         uri = 'mongodb://user:passwd@server1,server2/test'
         list = self.ssh.parse_mongo_url(uri)
         self.assertEquals(list[0], 'user')
