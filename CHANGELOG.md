@@ -1,10 +1,12 @@
 # Change Log
 
-## Version 1.x
+## Version 1.4
 - Add allowed_targets to limit collab account
   choices for a scope
 - Add support for specifying target_hosts
 - Add ability to revoke keys and list revoked keys
+- Update to Python 3
+- Switch to github actions for tests
 
 ## Version 1.3
 - Add Windows/Putty Support
