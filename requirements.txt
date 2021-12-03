@@ -1,5 +1,5 @@
 python-pam
-pymongo
+pymongo==3.12.1
 gunicorn
 flask
 pyyaml

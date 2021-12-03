@@ -202,7 +202,7 @@ class SSHAuth(object):
         """
         try:
             return user in grp.getgrnam('c_%s' % target_user).gr_mem
-        except:
+        except Exception:
             self._debug("Missing group c_%s" % target_user)
             return False
 

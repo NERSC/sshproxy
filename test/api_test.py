@@ -372,28 +372,32 @@ class APITestCase(unittest.TestCase):
 
         # Try revoking as regular/non-admin user
         h = self._gen_token_header({'user': 'auser'}, self.jwt_key)
-        rv = self.app.post('/revoke/%s' % (serial), headers=h)
+        rv = self.app.post('/revoke_key/%s' % (serial), headers=h)
         self.assertEquals(rv.status_code, 401)
 
         # Try revoking with bad signing key
         h = self._gen_token_header({'user': 'admin'}, self.jwt_bad_key)
-        rv = self.app.post('/revoke/%s' % (serial), headers=h)
+        rv = self.app.post('/revoke_key/%s' % (serial), headers=h)
         self.assertEquals(rv.status_code, 401)
 
         # Check key is still valid
         act_keys = self.app.get('/get_keys/auser').data.decode('utf-8')
         self.assertIn(serial, act_keys)
+        revoked = self.app.get('/revoke').data.decode('utf-8')
+        self.assertNotIn(serial, revoked)
         revoked = self.app.get('/revoked').data.decode('utf-8')
         self.assertNotIn(serial, revoked)
 
         # Try revoking as a real user
         h = self._gen_token_header({'user': 'admin'}, self.jwt_key)
-        rv = self.app.post('/revoke/%s' % (serial), headers=h)
+        rv = self.app.post('/revoke_key/%s' % (serial), headers=h)
         self.assertEquals(rv.status_code, 200)
 
         # Confirm key is gone
         act_keys = self.app.get('/get_keys/auser').data.decode('utf-8')
         self.assertNotIn(serial, act_keys)
+        revoked = self.app.get('/revoke').data.decode('utf-8')
+        self.assertIn(serial, revoked)
         revoked = self.app.get('/revoked').data.decode('utf-8')
         self.assertIn(serial, revoked)
 

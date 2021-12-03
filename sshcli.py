@@ -82,7 +82,7 @@ def main():
 
     try:
         write_output(resp.text, output)
-    except:
+    except Exception:
         error('Error saving output.')
     print("Success.  Key saved in %s" % (output))
 
