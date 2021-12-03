@@ -324,7 +324,8 @@ def reset():
 
 
 @app.route('/revoked', methods=['GET'])
-def revoked():
+@app.route('/revoke', methods=['GET'])
+def revoke():
     """
     Get list of revoked keys
     """
@@ -335,8 +336,8 @@ def revoked():
     return resp
 
 
-@app.route('/revoke/<serial>', methods=['POST'])
-def revoke(serial):
+@app.route('/revoke_key/<serial>', methods=['POST'])
+def revoke_key(serial):
     """
     Revoke a key based on its serial ID
     """
