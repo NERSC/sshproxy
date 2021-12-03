@@ -240,6 +240,10 @@ class SSHAuth(object):
         else:
             pname = 'user_%s' % (principle)
         command.extend(['-I', pname, '-n', principle])
+        if 'no-pty' in scope and scope['no-pty']:
+            command.extend(['-O', 'no-pty'])
+        if 'command' in scope:
+            command.extend(['-O', 'force-command="%s"' % scope['command']])
         if scope is not None and 'allowed_hosts' in scope:
             allowed_hosts = scope['allowed_hosts']
             command.extend(['-O', 'source-address=' +
@@ -451,48 +455,65 @@ class SSHAuth(object):
         """
         resp = []
         now = time()
-        q = {'principle': user, 'enabled': True}
+        q = {'$or': [{'principle': user}, {'target_user': user}], 'enabled': True}
         if scopename is not None:
             self._get_scope(scopename)
             q['scope'] = scopename
 
         for rec in self.registry.find(q):
+            kscope = self.scopes[rec['scope']]
+            target_user = rec.get('target_user')
             if now > rec['expires']:
                 self.expire(rec['_id'])
-            elif 'target_user' in rec:
-                # Skip target_user records since this
-                # would mean it is a collab key
+                continue
+            elif target_user and user != target_user:
+                # If there is target user in the key rec
+                # then the user must match that
+                continue
+            elif 'allowed_target_users' in kscope and \
+                 target_user not in kscope['allowed_target_users']:
                 continue
             elif 'allowed_targets' in rec and ip not in rec['allowed_targets']:
                 continue
-            else:
-                kscope = rec['scope']
-                allowed_hosts = None
-                if 'allowed_hosts' in self.scopes[kscope]:
-                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
-                pubkey = rec['pubkey']
-                if allowed_hosts is not None:
-                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
-                    pubkey = '%s %s' % (allowstring, pubkey)
-                resp.append(pubkey)
+            options = []
+            pubkey = rec['pubkey']
+            if 'allowed_hosts' in kscope:
+                allowed_hosts = kscope['allowed_hosts']
+                options.append('from="%s"' % (','.join(allowed_hosts)))
+                # allowstring = 'from="%s"' % (','.join(allowed_hosts))
+                # pubkey = '%s %s' % (allowstring, pubkey)
+            if 'no-pty' in kscope and kscope['no-pty']:
+                options.append('no-pty')
+            if 'command' in kscope:
+                options.append('command="%s"' % kscope['command'])
+            if len(options) > 0:
+                pubkey = '%s %s' % (','.join(options), pubkey)
+            resp.append(pubkey)
+        return resp
 
         q = {'target_user': user, 'enabled': True}
 
         for rec in self.registry.find(q):
             if now > rec['expires']:
                 self.expire(rec['_id'])
+                continue
             elif 'allowed_targets' in rec and ip not in rec['allowed_targets']:
                 continue
-            else:
-                kscope = rec['scope']
-                allowed_hosts = None
-                if 'allowed_hosts' in self.scopes[kscope]:
-                    allowed_hosts = self.scopes[kscope]['allowed_hosts']
-                pubkey = rec['pubkey']
-                if allowed_hosts is not None:
-                    allowstring = 'from="%s"' % (','.join(allowed_hosts))
-                    pubkey = '%s %s' % (allowstring, pubkey)
-                resp.append(pubkey)
+            kscope = self.scopes[rec['scope']]
+            options = []
+            allowed_hosts = None
+            if 'allowed_hosts' in kscope:
+                allowed_hosts = kscope['allowed_hosts']
+            pubkey = rec['pubkey']
+            if allowed_hosts is not None:
+                options.append('from="%s"' % (','.join(allowed_hosts)))
+            if 'no-pty' in kscope and kscope['no-pty']:
+                options.append('no-pty')
+            if 'command' in kscope:
+                options.append('command="%s"' % kscope['command'])
+            if len(options) > 0:
+                pubkey = '%s %s' % (','.join(options), pubkey)
+            resp.append(pubkey)
         return resp
 
     def expire(self, id):
