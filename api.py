@@ -348,7 +348,7 @@ def revoke_key(serial):
         return "Success"
     except AuthError as err:
         return auth_failure(str(err))
-    except PrivError as err:
+    except PrivError:
         return Response('Unprivelged user', 401)
 
 
