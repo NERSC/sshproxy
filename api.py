@@ -33,7 +33,7 @@ CONFIG = os.environ.get('CONFIG', 'config.yaml')
 JWT_PUB = os.environ.get("JWT_PUB")
 ssh_auth = SSHAuth(CONFIG)
 jwt_pub = None
-_VERSION = "1.4.0"
+_VERSION = "1.4.1"
 
 if JWT_PUB is not None and os.path.exists(JWT_PUB):
     with open(JWT_PUB) as f:
@@ -89,7 +89,7 @@ def get_skey(request):
         data = json.loads(rqd)
         if 'skey' in data:
             return data['skey']
-    except:
+    except Exception:
         return None
     return None
 
@@ -103,7 +103,7 @@ def get_target_user(request):
         data = json.loads(rqd)
         if 'target_user' in data:
             return data['target_user']
-    except:
+    except Exception:
         return None
     return None
 
@@ -215,7 +215,7 @@ def create_pair_scope(scope):
     except ScopeError as err:
         app.logger.warning('Bad scope specified %s' % str(err))
         return str(err), 404
-    except:
+    except Exception:
         return failure('create_pair_scope')
 
 
@@ -240,7 +240,7 @@ def create_pair():
             return resp + cert
     except AuthError as err:
         return auth_failure(str(err))
-    except:
+    except Exception:
         return failure('create_pair')
 
 
@@ -266,7 +266,7 @@ def get_ca_pubkey(scope):
     """
     try:
         return ssh_auth.get_ca_pubkey(scope)
-    except:
+    except Exception:
         return failure('get_ca_pubkey')
 
 
@@ -283,7 +283,7 @@ def get_keys(username):
         for k in keys:
             mess += k + '\n'
         return mess
-    except:
+    except Exception:
         return failure('get_keys')
 
 
@@ -303,7 +303,7 @@ def get_keys_scope(scope, username):
     except ScopeError as err:
         app.logger.warning('Bad scope specified %s' % str(err))
         return str(err), 404
-    except:
+    except Exception:
         return failure('get_keys_scope')
 
 
@@ -319,24 +319,25 @@ def reset():
         return "Success"
     except AuthError as err:
         return auth_failure(str(err))
-    except:
+    except Exception:
         return failure('reset')
 
 
 @app.route('/revoked', methods=['GET'])
-def revoked():
+@app.route('/revoke', methods=['GET'])
+def revoke():
     """
     Get list of revoked keys
     """
     try:
         resp = ssh_auth.revoked()
-    except:
+    except Exception:
         return failure('revoke')
     return resp
 
 
-@app.route('/revoke/<serial>', methods=['POST'])
-def revoke(serial):
+@app.route('/revoke_key/<serial>', methods=['POST'])
+def revoke_key(serial):
     """
     Revoke a key based on its serial ID
     """
@@ -347,7 +348,7 @@ def revoke(serial):
         return "Success"
     except AuthError as err:
         return auth_failure(str(err))
-    except PrivError as err:
+    except PrivError:
         return Response('Unprivelged user', 401)
 
 

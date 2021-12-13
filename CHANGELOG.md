@@ -1,5 +1,9 @@
 # Change Log
 
+## Version 1.4.1
+- Switch revoke to revoked_keys to revoke a key
+- Allow /revoke or /revoked to get revoked keys
+
 ## Version 1.4
 - Add allowed_targets to limit collab account
   choices for a scope
