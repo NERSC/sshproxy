@@ -1,5 +1,8 @@
 # Change Log
 
+## Version 1.4.2
+- Add no-pty support 
+
 ## Version 1.4.1
 - Switch revoke to revoked_keys to revoke a key
 - Allow /revoke or /revoked to get revoked keys
