@@ -72,7 +72,7 @@ class SSHAuthTestCase(unittest.TestCase):
         p = Popen(['ssh-keygen', '-f', '-', '-L'], stdout=PIPE, stdin=PIPE,
                   stderr=None)
         out = p.communicate(input=cert.encode())[0]
-        return out
+        return out.decode('utf-8')
 
     def get_prin(self, certtext):
         # Extract the principal
@@ -118,9 +118,10 @@ class SSHAuthTestCase(unittest.TestCase):
         Test key expiration in get for collab
         """
         now = time()
+        tuser = 'tuser'
         rec = {
              'principle': 'collab',
-             'target_user': self.user,
+             'target_user': tuser,
              'pubkey': 'ssh-rsa bogus_key blah serial:%d' % (now),
              'type': 'user',
              'enabled': True,
@@ -130,12 +131,12 @@ class SSHAuthTestCase(unittest.TestCase):
              'expires': now+10
              }
         self.registry.insert(rec)
-        keys = self.ssh.get_keys(self.user, 'scope5')
+        keys = self.ssh.get_keys(tuser, 'scope5', ip=_localhost)
         self.assertEquals(len(keys), 1)
         self.registry.remove()
         rec['expires'] = now - 10
         self.registry.insert(rec)
-        keys = self.ssh.get_keys(self.user, 'scope5')
+        keys = self.ssh.get_keys(tuser, 'scope5', ip=_localhost)
         self.assertEquals(len(keys), 0)
 
     def test_scope(self):
@@ -225,7 +226,7 @@ class SSHAuthTestCase(unittest.TestCase):
         p, c = self.ssh.create_pair(self.user, _localhost, scope5,
                                     target_user=tuser)
         cout = self.read_cert(c)
-        principal = self.get_prin(cout.decode('utf-8'))
+        principal = self.get_prin(cout)
         self.assertEquals(principal, tuser)
         self.assertIsNotNone(p)
         r = self.registry.find_one({'principle': self.user, 'scope': scope5})
@@ -502,6 +503,25 @@ class SSHAuthTestCase(unittest.TestCase):
         self.assertEquals(list[1], 'passwd')
         self.assertEquals(list[2], ['server1', 'server2'])
         self.assertEquals(list[3], 'blah')
+
+    def test_limits(self):
+        """
+        Test varios limits
+        """
+        scope5 = 'scope5'
+        tuser = 'tuser'
+
+        self.ssh._check_collaboration_account = MagicMock(return_value=True)
+        p, c = self.ssh.create_pair(self.user, _localhost, scope5,
+                                    target_user=tuser)
+        cout = self.read_cert(c)
+
+        self.assertNotIn('permit-pty', cout)
+        self.assertIn('/bin/date', cout)
+
+        keys = '\n'.join(self.ssh.get_keys(tuser, ip=_localhost))
+        self.assertIn('/bin/date', keys)
+        self.assertIn('no-pty', keys)
 
 
 if __name__ == '__main__':
